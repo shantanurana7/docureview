@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Environment Variables
+.env
+.env.local
+
+# Build outputs
+/frontend/dist/
+/frontend/build/
+
+# Database and Uploads
+/backend/docureview.db
+/backend/docureview.db-journal
+/backend/docureview.db-wal
+/backend/docureview.db-shm
+/backend/uploads/*
+!/backend/uploads/.gitkeep
+
+# IDE / OS Files
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db

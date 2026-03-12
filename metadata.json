@@ -1,0 +1,4 @@
+{
+  "name": "DocuReview",
+  "description": "A streamlined document review tool allowing users to upload images or PDFs, add visual annotations (rectangles, circles) with comments, and export the reviewed document as a PDF."
+}
