@@ -39,7 +39,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
     const [scores, setScores] = useState<Score[]>([]);
     const [designers, setDesigners] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
-    const [designerFilter, setDesignerFilter] = useState<string | null>(null);
+    const [designerFilter, setDesignerFilter] = useState<string>('all');
     const [timeFilter, setTimeFilter] = useState<string>('all');
     const [customDateRange, setCustomDateRange] = useState<Date[] | null>(null);
     const [showExportDialog, setShowExportDialog] = useState(false);
@@ -67,7 +67,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
 
     const filteredDocs = documents.filter(d => {
         let keep = true;
-        if (designerFilter) {
+        if (designerFilter && designerFilter !== 'all') {
             keep = keep && d.designer_id === designerFilter;
         }
         if (timeFilter !== 'all') {
@@ -89,7 +89,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
     const completedDocs = filteredDocs.filter(d => ['reviewed', 'completed'].includes(d.status));
 
     // Dashboard metrics — filter scores locally by designer + time
-    const designerFilteredScores = designerFilter ? scores.filter(s => s.designer_id === designerFilter) : scores;
+    const designerFilteredScores = (designerFilter && designerFilter !== 'all') ? scores.filter(s => s.designer_id === designerFilter) : scores;
     const filteredScores = filterByTime(designerFilteredScores, timeFilter, customDateRange);
     const avgScore = filteredScores.length > 0 ? (filteredScores.reduce((a, s) => a + s.composite_score, 0) / filteredScores.length) : 0;
     const totalReviewed = filteredScores.length;
@@ -175,7 +175,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
         return <Tag value={rowData.status.replace('_', ' ')} severity={map[rowData.status] || 'info'} className="capitalize text-xs" />;
     };
 
-    const designerOptions = [{ label: 'All Designers', value: null as any }, ...designers.map(d => ({ label: d.name, value: d.id }))];
+    const designerOptions = [{ label: 'All Designers', value: 'all' }, ...designers.map(d => ({ label: d.name, value: d.id }))];
     const timeOptions = [
         { label: 'All Time', value: 'all' },
         { label: 'This Week', value: 'week' },
