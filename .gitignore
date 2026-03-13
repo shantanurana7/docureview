@@ -14,6 +14,10 @@ node_modules/
 /backend/docureview.db-journal
 /backend/docureview.db-wal
 /backend/docureview.db-shm
+/docureview.db
+/docureview.db-journal
+/docureview.db-wal
+/docureview.db-shm
 /backend/uploads/*
 !/backend/uploads/.gitkeep
 
