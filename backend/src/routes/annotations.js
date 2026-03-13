@@ -21,7 +21,8 @@ router.post('/:documentId', (req, res) => {
     const insertStmt = db.prepare(`INSERT INTO annotations (id, document_id, type, page_number, severity, error_category, x, y, width, height, comment, is_resolved) 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
-    const transaction = db.transaction(() => {
+    try {
+        db.exec('BEGIN');
         deleteStmt.run(req.params.documentId);
         for (const ann of annotations) {
             insertStmt.run(
@@ -39,9 +40,12 @@ router.post('/:documentId', (req, res) => {
                 ann.is_resolved || 0
             );
         }
-    });
-
-    transaction();
+        db.exec('COMMIT');
+    } catch (err) {
+        db.exec('ROLLBACK');
+        console.error('Annotation save error:', err);
+        return res.status(500).json({ error: 'Failed to save annotations' });
+    }
     res.json({ success: true, count: annotations.length });
 });
 
