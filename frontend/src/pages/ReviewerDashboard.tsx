@@ -47,7 +47,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
 
     useEffect(() => {
         if (user) { loadData(); }
-    }, [user, designerFilter]);
+    }, [user]);
 
     const loadData = async () => {
         if (!user) return;
@@ -55,7 +55,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
         try {
             const [docs, scoreData, designerData] = await Promise.all([
                 documentsApi.getByReviewer(user.id),
-                scoresApi.getByReviewer(user.id, designerFilter || undefined),
+                scoresApi.getByReviewer(user.id),
                 usersApi.getDesigners(),
             ]);
             setDocuments(docs);
@@ -88,8 +88,9 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
     const assignedDocs = filteredDocs.filter(d => ['pending', 'in_review'].includes(d.status));
     const completedDocs = filteredDocs.filter(d => ['reviewed', 'completed'].includes(d.status));
 
-    // Dashboard metrics
-    const filteredScores = filterByTime(scores, timeFilter, customDateRange);
+    // Dashboard metrics — filter scores locally by designer + time
+    const designerFilteredScores = designerFilter ? scores.filter(s => s.designer_id === designerFilter) : scores;
+    const filteredScores = filterByTime(designerFilteredScores, timeFilter, customDateRange);
     const avgScore = filteredScores.length > 0 ? (filteredScores.reduce((a, s) => a + s.composite_score, 0) / filteredScores.length) : 0;
     const totalReviewed = filteredScores.length;
     const totalComments = 0; // Would need annotation count per doc — future enhancement
