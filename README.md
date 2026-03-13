@@ -4,7 +4,7 @@ DocuReview is a robust web application for seamless document proofing, annotatio
 
 ## Tech Stack
 - **Frontend**: React, TypeScript, PrimeReact, Tailwind CSS, Vite
-- **Backend**: Node.js, Express, better-sqlite3 (SQLite)
+- **Backend**: Node.js, Express, node:sqlite (Built-in Native SQLite)
 - **Features**: Real-time PDF rendering, interactive Canvas annotations, CSV & PDF exporting, Role-based Dashboards.
 
 ## Prerequisites
