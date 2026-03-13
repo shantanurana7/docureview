@@ -8,6 +8,7 @@ import { Column } from 'primereact/column';
 import { Tag } from 'primereact/tag';
 import { TabView, TabPanel } from 'primereact/tabview';
 import { Dropdown } from 'primereact/dropdown';
+import { Calendar } from 'primereact/calendar';
 import { Chart } from 'primereact/chart';
 import { Button } from 'primereact/button';
 import { Dialog } from 'primereact/dialog';
@@ -40,6 +41,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
     const [loading, setLoading] = useState(true);
     const [designerFilter, setDesignerFilter] = useState<string | null>(null);
     const [timeFilter, setTimeFilter] = useState<string>('all');
+    const [customDateRange, setCustomDateRange] = useState<Date[] | null>(null);
     const [showExportDialog, setShowExportDialog] = useState(false);
     const [downloadingId, setDownloadingId] = useState('');
 
@@ -63,11 +65,31 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
         finally { setLoading(false); }
     };
 
-    const assignedDocs = documents.filter(d => ['pending', 'in_review'].includes(d.status));
-    const completedDocs = documents.filter(d => ['reviewed', 'completed'].includes(d.status));
+    const filteredDocs = documents.filter(d => {
+        let keep = true;
+        if (designerFilter) {
+            keep = keep && d.designer_id === designerFilter;
+        }
+        if (timeFilter !== 'all') {
+            const dDate = new Date(d.created_at || Date.now());
+            const now = new Date();
+            if (timeFilter === 'week') keep = keep && dDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            if (timeFilter === 'month') keep = keep && dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
+            if (timeFilter === 'year') keep = keep && dDate.getFullYear() === now.getFullYear();
+            if (timeFilter === 'custom' && customDateRange && customDateRange[0] && customDateRange[1]) {
+                const end = new Date(customDateRange[1]);
+                end.setHours(23, 59, 59, 999);
+                keep = keep && dDate >= customDateRange[0] && dDate <= end;
+            }
+        }
+        return keep;
+    });
+
+    const assignedDocs = filteredDocs.filter(d => ['pending', 'in_review'].includes(d.status));
+    const completedDocs = filteredDocs.filter(d => ['reviewed', 'completed'].includes(d.status));
 
     // Dashboard metrics
-    const filteredScores = filterByTime(scores, timeFilter);
+    const filteredScores = filterByTime(scores, timeFilter, customDateRange);
     const avgScore = filteredScores.length > 0 ? (filteredScores.reduce((a, s) => a + s.composite_score, 0) / filteredScores.length) : 0;
     const totalReviewed = filteredScores.length;
     const totalComments = 0; // Would need annotation count per doc — future enhancement
@@ -158,6 +180,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
         { label: 'This Week', value: 'week' },
         { label: 'This Month', value: 'month' },
         { label: 'This Year', value: 'year' },
+        { label: 'Custom Range', value: 'custom' },
     ];
 
     const tabHeaderTemplate = (title: string, icon: string, index: number) => (options: any) => {
@@ -186,8 +209,33 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
                     <TabPanel headerTemplate={tabHeaderTemplate('Dashboard', 'pi pi-chart-bar mr-2', 0)}>
                         <div className="space-y-6">
                             {/* Filters Top Bar */}
-                            <div className="flex justify-end pt-2">
-                                <button onClick={() => setShowExportDialog(true)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-brand-600 border border-brand-200 rounded-lg hover:bg-brand-50 transition-colors shadow-sm">
+                            <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+                                <Dropdown 
+                                    value={designerFilter} 
+                                    options={designerOptions} 
+                                    onChange={e => setDesignerFilter(e.value)} 
+                                    placeholder="All Designers" 
+                                    className="w-48 text-sm h-[38px] flex items-center" 
+                                />
+                                <Dropdown 
+                                    value={timeFilter} 
+                                    options={timeOptions} 
+                                    onChange={e => setTimeFilter(e.value)} 
+                                    className="w-40 text-sm h-[38px] flex items-center" 
+                                />
+                                {timeFilter === 'custom' && (
+                                    <Calendar
+                                        value={customDateRange}
+                                        onChange={(e) => setCustomDateRange(e.value as Date[])}
+                                        selectionMode="range"
+                                        readOnlyInput
+                                        hideOnRangeSelection
+                                        placeholder="Select Date Range"
+                                        className="h-[38px] w-60 text-sm"
+                                        inputClassName="text-sm h-[38px] px-3 py-2 border border-surface-300 rounded-lg"
+                                    />
+                                )}
+                                <button onClick={handleExportCSV} disabled={filteredScores.length === 0} className="flex items-center gap-2 px-4 py-2 h-[38px] text-sm font-medium text-white bg-brand-600 border border-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm disabled:opacity-50">
                                     <Download size={16} /> Export CSV
                                 </button>
                             </div>
@@ -291,33 +339,12 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
                 </TabView>
             </div>
 
-            {/* Export CSV Confirmation Dialog */}
-            <Dialog header="Export CSV" visible={showExportDialog} onHide={() => setShowExportDialog(false)} style={{ width: '420px' }} modal>
-                <div className="space-y-5 pt-2">
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-surface-600 mb-1">Filter by Designer</label>
-                            <Dropdown value={designerFilter} options={designerOptions} onChange={e => setDesignerFilter(e.value)} placeholder="All Designers" className="w-full text-sm" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-surface-600 mb-1">Time Period</label>
-                            <Dropdown value={timeFilter} options={timeOptions} onChange={e => setTimeFilter(e.value)} className="w-full text-sm" />
-                        </div>
-                    </div>
-                    
-                    <div className="flex justify-end gap-3 pt-4 border-t border-surface-200">
-                        <button onClick={() => setShowExportDialog(false)} className="px-4 py-2 text-sm font-medium text-surface-600 border border-surface-300 rounded-lg hover:bg-surface-50 transition-colors">Cancel</button>
-                        <button onClick={handleExportCSV} disabled={filteredScores.length === 0} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg disabled:opacity-50 transition-colors">
-                            <i className="pi pi-download"></i> Download CSV
-                        </button>
-                    </div>
-                </div>
-            </Dialog>
+            {/* Export CSV Dialog Replaced Since It was Moved to Dashboard Header (Intentionally empty placeholder) */}
         </div>
     );
 }
 
-function filterByTime(scores: Score[], period: string): Score[] {
+function filterByTime(scores: Score[], period: string, customRange?: Date[] | null): Score[] {
     if (period === 'all') return scores;
     const now = new Date();
     return scores.filter(s => {
@@ -328,6 +355,11 @@ function filterByTime(scores: Score[], period: string): Score[] {
         }
         if (period === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         if (period === 'year') return d.getFullYear() === now.getFullYear();
+        if (period === 'custom' && customRange && customRange[0] && customRange[1]) {
+            const end = new Date(customRange[1]);
+            end.setHours(23, 59, 59, 999);
+            return d >= customRange[0] && d <= end;
+        }
         return true;
     });
 }
