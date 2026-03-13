@@ -176,11 +176,19 @@ export default function AdminPage() {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-surface-600 mb-1">Stream</label>
-                        <InputText
+                        <Dropdown
                             value={editUser.stream || ''}
-                            onChange={e => setEditUser({ ...editUser, stream: e.target.value })}
+                            options={[
+                                { label: 'Graphics', value: 'Graphics' },
+                                { label: 'Web', value: 'Web' },
+                                { label: 'Motion', value: 'Motion' },
+                                { label: 'Video', value: 'Video' },
+                                { label: 'UI/UX', value: 'UI/UX' },
+                                { label: 'Copywriting', value: 'Copywriting' }
+                            ]}
+                            onChange={e => setEditUser({ ...editUser, stream: e.value })}
                             className="w-full"
-                            placeholder="e.g. Graphics, Web, Motion"
+                            placeholder="Select a stream"
                         />
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t border-surface-200 mt-4">
