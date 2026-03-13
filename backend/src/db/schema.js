@@ -55,6 +55,7 @@ function initTables() {
       type TEXT NOT NULL,
       page_number INTEGER DEFAULT 1,
       severity TEXT NOT NULL,
+      error_category TEXT DEFAULT 'Design',
       x REAL NOT NULL,
       y REAL NOT NULL,
       width REAL NOT NULL,
