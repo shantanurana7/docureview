@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { documentsApi, annotationsApi, scoresApi } from '../services/api';
-import { Document as DocType, Annotation, ShapeType, Severity, ErrorCategory } from '../types';
+import { useStore } from '../context/StoreContext';
+import { getReviewById, updateAnnotations, submitScore, updateReview } from '../services/localStore';
+import { Review, Annotation, ShapeType, Severity, ErrorCategory, ReviewScore } from '../types';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
-import { Button } from 'primereact/button';
-import { ArrowLeft, Square, Circle, Save, SendHorizontal, Trash2, Download, Info, Pencil, Check, X } from 'lucide-react';
+import { ArrowLeft, Square, Circle, Save, SendHorizontal, Trash2, Download, Info, Pencil, Check, X, Mail } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { PDFDocument, rgb, PDFString, PDFName } from 'pdf-lib';
@@ -21,12 +20,12 @@ const SEVERITY_COLORS: Record<Severity, string> = {
 };
 
 export default function ReviewPage() {
-    const { documentId } = useParams<{ documentId: string }>();
-    const { user } = useAuth();
+    const { reviewId } = useParams<{ reviewId: string }>();
+    const storeData = useStore();
     const navigate = useNavigate();
     const viewerRef = useRef<HTMLDivElement>(null);
 
-    const [doc, setDoc] = useState<DocType | null>(null);
+    const [review, setReview] = useState<Review | null>(null);
     const [annotations, setAnnotations] = useState<Annotation[]>([]);
     const [activeTool, setActiveTool] = useState<ShapeType>(ShapeType.RECTANGLE);
     const [loading, setLoading] = useState(true);
@@ -63,68 +62,47 @@ export default function ReviewPage() {
     const [repeatOffence, setRepeatOffence] = useState<number>(1);
     const [submitting, setSubmitting] = useState(false);
 
-    useEffect(() => { if (documentId) loadDocument(); }, [documentId]);
-
-    const loadDocument = async () => {
-        if (!documentId) return;
-        setLoading(true);
-        try {
-            const [docData, annData] = await Promise.all([
-                documentsApi.getById(documentId),
-                annotationsApi.getByDocument(documentId),
-            ]);
-            setDoc(docData);
-            setAnnotations(annData.map((a: any) => ({
-                ...a,
-                pageNumber: a.page_number || a.pageNumber || 1,
-            })));
-        } catch (e) { console.error(e); }
-        finally { setLoading(false); }
-    };
-
-    // PDF rendering — fetch via API endpoint to avoid Vite proxy issues with binary
     useEffect(() => {
-        if (!doc || !documentId) return;
-        const ext = doc.filepath.split('.').pop()?.toLowerCase();
-        if (ext === 'pdf') {
-            setIsLoadingPdf(true);
-            (async () => {
-                try {
-                    if (!window.pdfjsLib) {
-                        console.error('pdf.js not loaded');
-                        return;
-                    }
-                    // Fetch securely as base64 to avoid browser download managers hijacking the binary stream
-                    const response = await documentsApi.getFileBase64(documentId);
-                    if (!response || !response.base64) throw new Error('PDF file is empty');
-                    
-                    const binaryString = atob(response.base64);
-                    const arrayBuffer = new ArrayBuffer(binaryString.length);
-                    const uint8Array = new Uint8Array(arrayBuffer);
-                    for (let i = 0; i < binaryString.length; i++) {
-                        uint8Array[i] = binaryString.charCodeAt(i);
-                    }
-                    
-                    if (arrayBuffer.byteLength === 0) throw new Error('PDF file is empty after decode');
-                    const loadingTask = window.pdfjsLib.getDocument({ data: uint8Array });
-                    const pdf = await loadingTask.promise;
-                    setNumPages(pdf.numPages);
-                    const page = await pdf.getPage(currentPage);
-                    const viewport = page.getViewport({ scale: 2.0 });
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    await page.render({ canvasContext: context, viewport }).promise;
-                    setPdfImageSrc(canvas.toDataURL('image/png'));
-                } catch (err) { console.error('PDF render error:', err); }
-                finally { setIsLoadingPdf(false); }
-            })();
+        if (reviewId) {
+            const r = getReviewById(reviewId);
+            if (r) {
+                setReview(r);
+                setAnnotations(r.annotations || []);
+            }
+            setLoading(false);
         }
-    }, [doc, documentId, currentPage]);
+    }, [reviewId, storeData]);
 
-    const isPdf = doc?.filepath.split('.').pop()?.toLowerCase() === 'pdf';
-    const fileUrl = documentId ? documentsApi.getFileUrl(documentId) : '';
+    // PDF rendering from local blob
+    useEffect(() => {
+        if (!review || !review.fileBlobUrl || review.fileType !== 'pdf') return;
+        setIsLoadingPdf(true);
+        (async () => {
+            try {
+                if (!window.pdfjsLib) {
+                    console.error('pdf.js not loaded');
+                    return;
+                }
+                const response = await fetch(review.fileBlobUrl!);
+                const arrayBuffer = await response.arrayBuffer();
+                if (arrayBuffer.byteLength === 0) throw new Error('PDF file is empty');
+                const loadingTask = window.pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+                const pdf = await loadingTask.promise;
+                setNumPages(pdf.numPages);
+                const page = await pdf.getPage(currentPage);
+                const viewport = page.getViewport({ scale: 2.0 });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                await page.render({ canvasContext: context, viewport }).promise;
+                setPdfImageSrc(canvas.toDataURL('image/png'));
+            } catch (err) { console.error('PDF render error:', err); }
+            finally { setIsLoadingPdf(false); }
+        })();
+    }, [review, currentPage]);
+
+    const isPdf = review?.fileType === 'pdf';
 
     // Drawing handlers
     const getRelativeCoords = (e: React.MouseEvent) => {
@@ -134,7 +112,7 @@ export default function ReviewPage() {
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        if (!doc || commentModalOpen) return;
+        if (!review || commentModalOpen) return;
         setIsDrawing(true);
         const c = getRelativeCoords(e);
         setStartPoint({ x: c.pctX, y: c.pctY });
@@ -157,6 +135,7 @@ export default function ReviewPage() {
         setTempShape({ type: activeTool, x: currentRect.x, y: currentRect.y, width: currentRect.w, height: currentRect.h });
         setComment('');
         setSeverity(Severity.MINOR);
+        setErrorCat(ErrorCategory.DESIGN);
         setEditingId(null);
         setCommentModalOpen(true);
     };
@@ -200,29 +179,25 @@ export default function ReviewPage() {
 
     const removeAnnotation = (id: string) => setAnnotations(prev => prev.filter(a => a.id !== id));
 
-    const handleSaveAnnotations = async () => {
-        if (!documentId) return;
-        try {
-            await annotationsApi.save(documentId, annotations);
-            alert('Annotations saved!');
-        } catch (e: any) { alert(e.message); }
+    const handleSaveAnnotations = () => {
+        if (!reviewId) return;
+        updateAnnotations(reviewId, annotations);
+        alert('Annotations saved!');
+    };
+
+    const getFileArrayBuffer = async (): Promise<ArrayBuffer | null> => {
+        if (!review?.fileBlobUrl) return null;
+        const response = await fetch(review.fileBlobUrl);
+        return response.arrayBuffer();
     };
 
     const handleSaveAsPdf = async () => {
-        if (!viewerRef.current || !doc || !documentId) return;
+        if (!viewerRef.current || !review) return;
         try {
             if (isPdf) {
-                const res = await documentsApi.getFileBase64(documentId);
-                if (!res || !res.base64) throw new Error('PDF file is empty');
-                
-                const binaryString = atob(res.base64);
-                const arrayBuffer = new ArrayBuffer(binaryString.length);
-                const uint8Array = new Uint8Array(arrayBuffer);
-                for (let i = 0; i < binaryString.length; i++) {
-                    uint8Array[i] = binaryString.charCodeAt(i);
-                }
-                
-                const pdfDoc = await PDFDocument.load(uint8Array);
+                const arrayBuffer = await getFileArrayBuffer();
+                if (!arrayBuffer || arrayBuffer.byteLength === 0) throw new Error('PDF file is empty');
+                const pdfDoc = await PDFDocument.load(new Uint8Array(arrayBuffer));
                 const pages = pdfDoc.getPages();
                 annotations.forEach(ann => {
                     const pageIdx = (ann.pageNumber || 1) - 1;
@@ -248,7 +223,7 @@ export default function ReviewPage() {
                 const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = `${doc.title}_reviewed.pdf`;
+                link.download = `${review.title}_reviewed.pdf`;
                 link.click();
                 URL.revokeObjectURL(link.href);
             } else {
@@ -256,22 +231,47 @@ export default function ReviewPage() {
                 const imgData = canvas.toDataURL('image/png');
                 const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'l' : 'p', unit: 'px', format: [canvas.width, canvas.height] });
                 pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-                pdf.save(`${doc.title}_reviewed.pdf`);
+                pdf.save(`${review.title}_reviewed.pdf`);
             }
         } catch (err) { console.error(err); alert('PDF export failed'); }
     };
 
-    const handleCompleteReview = () => setShowScoring(true);
+    const handleEmailDesigner = () => {
+        if (!review) return;
+        const score = review.score;
+        const subject = encodeURIComponent(`DocuReview: ${review.title} — Review Complete`);
+        let body = `Hi ${review.designer_name},\n\nThe review for "${review.title}" (Job: ${review.job_id}) has been completed.\n\n`;
+        if (score) {
+            body += `--- SCORE SUMMARY ---\n`;
+            body += `Quality:          ${score.quality}\n`;
+            body += `Complexity:       ${score.complexity}x\n`;
+            body += `FTP Band:         ${score.ftp}\n`;
+            body += `Design:           ${score.design}\n`;
+            body += `Repeat Offence:   ${score.repeat_offence}x\n`;
+            body += `─────────────────────\n`;
+            body += `Composite Score:  ${score.composite_score.toFixed(2)}\n\n`;
+        }
+        body += `Total Annotations: ${annotations.length}\n\n`;
+        body += `Please find the reviewed PDF attached.\n\nBest regards`;
+        const mailto = `mailto:${review.designer_email || ''}?subject=${subject}&body=${encodeURIComponent(body)}`;
+        window.open(mailto, '_blank');
+    };
 
-    const handleSubmitScore = async () => {
-        if (!documentId || !user) return;
+    const handleCompleteReview = () => {
+        if (!reviewId) return;
+        // Save annotations first
+        updateAnnotations(reviewId, annotations);
+        setShowScoring(true);
+    };
+
+    const handleSubmitScore = () => {
+        if (!reviewId) return;
         setSubmitting(true);
         try {
-            await annotationsApi.save(documentId, annotations);
-            await scoresApi.submit({ document_id: documentId, reviewer_id: user.id, quality, complexity: complexityScore, ftp: ftpBand, design: designScore, repeat_offence: repeatOffence });
-            await documentsApi.updateStatus(documentId, 'reviewed');
+            const score: ReviewScore = { quality, complexity: complexityScore, ftp: ftpBand, design: designScore, repeat_offence: repeatOffence, composite_score: compositeScore };
+            submitScore(reviewId, score);
             setShowScoring(false);
-            navigate('/reviewer');
+            navigate('/');
         } catch (e: any) { alert(e.message); }
         finally { setSubmitting(false); }
     };
@@ -287,6 +287,7 @@ export default function ReviewPage() {
     const repeatOptions = [{ label: 'None (1x)', value: 1 }, { label: '2 offences (2x)', value: 2 }, { label: '3+ offences (4x)', value: 4 }];
 
     if (loading) return <div className="flex items-center justify-center h-screen"><i className="pi pi-spin pi-spinner text-4xl text-brand-600" /></div>;
+    if (!review) return <div className="flex flex-col items-center justify-center h-screen text-surface-500"><p>Review not found. The file may have been uploaded in a previous session.</p><button onClick={() => navigate('/')} className="mt-4 text-brand-600 hover:underline">Go to Dashboard</button></div>;
 
     return (
         <div className="flex h-[calc(100vh-57px)]">
@@ -308,7 +309,7 @@ export default function ReviewPage() {
                             <img src={pdfImageSrc} alt="PDF" className="max-w-full h-auto select-none pointer-events-none" />
                         ) : <div className="p-8 text-danger">Failed to render PDF</div>
                     ) : (
-                        <img src={fileUrl} alt="Review" className="max-w-full h-auto select-none pointer-events-none" />
+                        review.fileBlobUrl ? <img src={review.fileBlobUrl} alt="Review" className="max-w-full h-auto select-none pointer-events-none" /> : <div className="p-8 text-danger">File not available</div>
                     )}
 
                     {/* Annotation overlays */}
@@ -362,9 +363,9 @@ export default function ReviewPage() {
             <div className="w-80 bg-white border-l border-surface-200 flex flex-col h-full shadow-lg">
                 {/* Header */}
                 <div className="p-4 border-b border-surface-100 bg-surface-50">
-                    <button onClick={() => navigate('/reviewer')} className="flex items-center gap-1.5 text-sm text-surface-500 hover:text-surface-700 mb-2"><ArrowLeft size={14} /> Back</button>
-                    <h2 className="text-base font-bold text-surface-800 truncate">{doc?.title}</h2>
-                    <p className="text-xs text-surface-400 mt-0.5">Job: {doc?.job_id} · By: {doc?.designer_name}</p>
+                    <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-sm text-surface-500 hover:text-surface-700 mb-2"><ArrowLeft size={14} /> Back</button>
+                    <h2 className="text-base font-bold text-surface-800 truncate">{review.title}</h2>
+                    <p className="text-xs text-surface-400 mt-0.5">Job: {review.job_id} · By: {review.designer_name}</p>
                 </div>
 
                 {/* Tools */}
@@ -397,7 +398,10 @@ export default function ReviewPage() {
                                 <div key={ann.id} className="p-3 bg-white border border-surface-200 rounded-lg text-sm relative pl-4 group hover:border-surface-300 transition-colors">
                                     <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg" style={{ backgroundColor: SEVERITY_COLORS[ann.severity] }} />
                                     <div className="flex justify-between items-center mb-1">
-                                        <span className="inline-flex items-center justify-center w-5 h-5 bg-brand-100 text-brand-700 text-[10px] font-bold rounded-full">{i + 1}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="inline-flex items-center justify-center w-5 h-5 bg-brand-100 text-brand-700 text-[10px] font-bold rounded-full">{i + 1}</span>
+                                            <span className="text-[10px] font-medium text-surface-400 capitalize">{ann.severity.toLowerCase()} · {ann.error_category}</span>
+                                        </div>
                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button onClick={() => { setSidebarEditId(ann.id); setSidebarEditComment(ann.comment); }} className="p-1 text-surface-400 hover:text-brand-600 rounded"><Pencil size={12} /></button>
                                             <button onClick={() => removeAnnotation(ann.id)} className="p-1 text-surface-400 hover:text-danger rounded"><Trash2 size={12} /></button>
@@ -428,6 +432,16 @@ export default function ReviewPage() {
                     <button onClick={handleSaveAsPdf} className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium border border-surface-300 rounded-lg hover:bg-surface-50 transition-colors">
                         <Download size={16} /> Save as PDF
                     </button>
+                    {review.status === 'reviewed' && (
+                        <div className="relative group">
+                            <button onClick={handleEmailDesigner} className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors">
+                                <Mail size={16} /> Email to Designer
+                            </button>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-surface-900 text-white text-xs p-2.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 text-center">
+                                Tip: Download the reviewed PDF first, then attach it to the email manually.
+                            </div>
+                        </div>
+                    )}
                     <button onClick={handleCompleteReview} className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
                         <SendHorizontal size={16} /> Complete Review & Score
                     </button>
@@ -465,7 +479,7 @@ export default function ReviewPage() {
 
             {/* Scoring Dialog */}
             <Dialog header="Scoring Matrix" visible={showScoring} onHide={() => setShowScoring(false)} style={{ width: '500px' }} modal>
-                <p className="text-xs text-surface-500 mb-4">Fill the scoring matrix before sending back to the designer. This data is for reviewer analytics only.</p>
+                <p className="text-xs text-surface-500 mb-4">Fill the scoring matrix to complete the review.</p>
                 <div className="space-y-4">
                     <div><label className="block text-sm font-medium text-surface-600 mb-1">Quality</label><Dropdown value={quality} options={qualityOptions} onChange={e => setQuality(e.value)} className="w-full" /></div>
                     <div><label className="block text-sm font-medium text-surface-600 mb-1">Complexity</label><Dropdown value={complexityScore} options={complexityOptions} onChange={e => setComplexityScore(e.value)} className="w-full" /></div>
@@ -479,7 +493,7 @@ export default function ReviewPage() {
                     <div className="flex justify-end gap-3 pt-4 mt-4">
                         <button onClick={() => setShowScoring(false)} className="px-4 py-2 text-sm font-medium text-surface-600 border border-surface-300 rounded-lg hover:bg-surface-50 transition-colors">Cancel</button>
                         <button onClick={handleSubmitScore} disabled={submitting} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg disabled:opacity-50 transition-colors">
-                            {submitting ? <i className="pi pi-spin pi-spinner" /> : <i className="pi pi-send" />} {submitting ? 'Submitting...' : 'Submit & Send to Designer'}
+                            {submitting ? <i className="pi pi-spin pi-spinner" /> : <i className="pi pi-check" />} {submitting ? 'Submitting...' : 'Complete Review'}
                         </button>
                     </div>
                 </div>

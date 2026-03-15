@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { documentsApi, scoresApi, usersApi } from '../services/api';
-import { Document as DocType, Score, User } from '../types';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useStore } from '../context/StoreContext';
+import { Review, ReviewScore } from '../types';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { Tag } from 'primereact/tag';
@@ -10,68 +9,31 @@ import { TabView, TabPanel } from 'primereact/tabview';
 import { Dropdown } from 'primereact/dropdown';
 import { Calendar } from 'primereact/calendar';
 import { Chart } from 'primereact/chart';
-import { Button } from 'primereact/button';
-import { Dialog } from 'primereact/dialog';
-import { useNavigate } from 'react-router-dom';
-import { BarChart3, Play, Download, TrendingUp, FileCheck, MessageSquare, Eye } from 'lucide-react';
+import { Download, TrendingUp, FileCheck, MessageSquare, Eye, Play, Mail } from 'lucide-react';
 import Papa from 'papaparse';
-import { downloadDocumentPdf } from '../utils/exportUtils';
 
-interface Props {
-    defaultTab?: 'dashboard' | 'assigned';
-}
-
-export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
-    const { user } = useAuth();
+export default function ReviewerDashboard() {
+    const storeData = useStore();
     const navigate = useNavigate();
-    const location = useLocation();
-    const [activeTab, setActiveTab] = useState(defaultTab === 'assigned' ? 1 : 0);
+    const [activeTab, setActiveTab] = useState(0);
 
-    // Sync tab when navigating via notification or URL change
-    useEffect(() => {
-        if (location.pathname.includes('/assigned')) {
-            setActiveTab(1);
-        } else if (location.pathname === '/reviewer') {
-            setActiveTab(0);
-        }
-    }, [location.pathname]);
-    const [documents, setDocuments] = useState<DocType[]>([]);
-    const [scores, setScores] = useState<Score[]>([]);
-    const [designers, setDesigners] = useState<User[]>([]);
-    const [loading, setLoading] = useState(true);
     const [designerFilter, setDesignerFilter] = useState<string>('all');
     const [timeFilter, setTimeFilter] = useState<string>('all');
     const [customDateRange, setCustomDateRange] = useState<Date[] | null>(null);
-    const [showExportDialog, setShowExportDialog] = useState(false);
-    const [downloadingId, setDownloadingId] = useState('');
 
-    useEffect(() => {
-        if (user) { loadData(); }
-    }, [user]);
+    const reviews = storeData.reviews;
 
-    const loadData = async () => {
-        if (!user) return;
-        setLoading(true);
-        try {
-            const [docs, scoreData, designerData] = await Promise.all([
-                documentsApi.getByReviewer(user.id),
-                scoresApi.getByReviewer(user.id),
-                usersApi.getDesigners(),
-            ]);
-            setDocuments(docs);
-            setScores(scoreData);
-            setDesigners(designerData);
-        } catch (e) { console.error(e); }
-        finally { setLoading(false); }
-    };
+    // Get unique designers
+    const designers = [...new Set(reviews.map(r => r.designer_name))].filter(Boolean);
 
-    const filteredDocs = documents.filter(d => {
+    // Filter reviews
+    const filteredReviews = reviews.filter(r => {
         let keep = true;
         if (designerFilter && designerFilter !== 'all') {
-            keep = keep && d.designer_id === designerFilter;
+            keep = keep && r.designer_name === designerFilter;
         }
         if (timeFilter !== 'all') {
-            const dDate = new Date(d.created_at || Date.now());
+            const dDate = new Date(r.created_at || Date.now());
             const now = new Date();
             if (timeFilter === 'week') keep = keep && dDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
             if (timeFilter === 'month') keep = keep && dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
@@ -85,23 +47,21 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
         return keep;
     });
 
-    const assignedDocs = filteredDocs.filter(d => ['pending', 'in_review'].includes(d.status));
-    const completedDocs = filteredDocs.filter(d => ['reviewed', 'completed'].includes(d.status));
+    const inProgressReviews = filteredReviews.filter(r => r.status === 'in_progress');
+    const completedReviews = filteredReviews.filter(r => r.status === 'reviewed');
 
-    // Dashboard metrics — filter scores locally by designer + time
-    const designerFilteredScores = (designerFilter && designerFilter !== 'all') ? scores.filter(s => s.designer_id === designerFilter) : scores;
-    const filteredScores = filterByTime(designerFilteredScores, timeFilter, customDateRange);
-    const avgScore = filteredScores.length > 0 ? (filteredScores.reduce((a, s) => a + s.composite_score, 0) / filteredScores.length) : 0;
-    const totalReviewed = filteredScores.length;
-    const totalComments = 0; // Would need annotation count per doc — future enhancement
+    // Dashboard metrics from completed reviews
+    const scoredReviews = completedReviews.filter(r => r.score);
+    const avgScore = scoredReviews.length > 0 ? (scoredReviews.reduce((a, r) => a + (r.score?.composite_score || 0), 0) / scoredReviews.length) : 0;
+    const totalReviewed = scoredReviews.length;
 
     // Chart data
-    const chartLabels = filteredScores.map(s => s.designer_name || 'Unknown').slice(-10);
+    const chartLabels = scoredReviews.map(r => r.designer_name || 'Unknown').slice(-10);
     const chartData = {
         labels: chartLabels,
         datasets: [{
             label: 'Composite Score',
-            data: filteredScores.map(s => s.composite_score).slice(-10),
+            data: scoredReviews.map(r => r.score?.composite_score || 0).slice(-10),
             backgroundColor: '#818cf8',
             borderColor: '#4f46e5',
             borderWidth: 2,
@@ -120,43 +80,18 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
         }
     };
 
-    const handleStartReview = async (doc: DocType) => {
-        try {
-            await documentsApi.updateStatus(doc.id, 'in_review');
-            navigate(`/reviewer/review/${doc.id}`);
-        } catch (e) { console.error(e); }
-    };
-
-    const handleReopenFile = async (doc: DocType) => {
-        try {
-            await documentsApi.updateStatus(doc.id, 'in_review');
-            navigate(`/reviewer/review/${doc.id}`);
-        } catch (e) { console.error(e); }
-    };
-
-    const handleDownloadPdf = async (doc: DocType) => {
-        try {
-            setDownloadingId(doc.id);
-            await downloadDocumentPdf(doc);
-        } catch (err: any) {
-            alert('Failed to download PDF: ' + err.message);
-        } finally {
-            setDownloadingId('');
-        }
-    };
-
     const handleExportCSV = () => {
-        const data = filteredScores.map(s => ({
-            'Document': s.title,
-            'Job ID': s.job_id,
-            'Designer': s.designer_name,
-            'Quality': s.quality,
-            'Complexity': s.complexity,
-            'FTP Band': s.ftp,
-            'Design': s.design,
-            'Repeat Offence': s.repeat_offence,
-            'Composite Score': s.composite_score.toFixed(2),
-            'Date': s.created_at,
+        const data = scoredReviews.map(r => ({
+            'Document': r.title,
+            'Job ID': r.job_id,
+            'Designer': r.designer_name,
+            'Quality': r.score?.quality,
+            'Complexity': r.score?.complexity,
+            'FTP Band': r.score?.ftp,
+            'Design': r.score?.design,
+            'Repeat Offence': r.score?.repeat_offence,
+            'Composite Score': r.score?.composite_score.toFixed(2),
+            'Date': r.created_at,
         }));
         const csv = Papa.unparse(data);
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -165,17 +100,16 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
         link.download = 'review_scores_export.csv';
         link.click();
         URL.revokeObjectURL(link.href);
-        setShowExportDialog(false);
     };
 
-    const statusTemplate = (rowData: DocType) => {
+    const statusTemplate = (rowData: Review) => {
         const map: Record<string, 'info' | 'warning' | 'success'> = {
-            pending: 'warning', in_review: 'info', reviewed: 'success', completed: 'success'
+            in_progress: 'info', reviewed: 'success',
         };
         return <Tag value={rowData.status.replace('_', ' ')} severity={map[rowData.status] || 'info'} className="capitalize text-xs" />;
     };
 
-    const designerOptions = [{ label: 'All Designers', value: 'all' }, ...designers.map(d => ({ label: d.name, value: d.id }))];
+    const designerOptions = [{ label: 'All Designers', value: 'all' }, ...designers.map(d => ({ label: d, value: d }))];
     const timeOptions = [
         { label: 'All Time', value: 'all' },
         { label: 'This Week', value: 'week' },
@@ -198,7 +132,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-surface-800">Reviewer Dashboard</h1>
-                    <p className="text-sm text-surface-500 mt-1">Review assigned files and track performance</p>
+                    <p className="text-sm text-surface-500 mt-1">Review files and track performance</p>
                 </div>
             </div>
 
@@ -211,18 +145,18 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
                         <div className="space-y-6">
                             {/* Filters Top Bar */}
                             <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-                                <Dropdown 
-                                    value={designerFilter} 
-                                    options={designerOptions} 
-                                    onChange={e => setDesignerFilter(e.value)} 
-                                    placeholder="All Designers" 
-                                    className="w-48 text-sm h-[38px] flex items-center" 
+                                <Dropdown
+                                    value={designerFilter}
+                                    options={designerOptions}
+                                    onChange={e => setDesignerFilter(e.value)}
+                                    placeholder="All Designers"
+                                    className="w-48 text-sm h-[38px] flex items-center"
                                 />
-                                <Dropdown 
-                                    value={timeFilter} 
-                                    options={timeOptions} 
-                                    onChange={e => setTimeFilter(e.value)} 
-                                    className="w-40 text-sm h-[38px] flex items-center" 
+                                <Dropdown
+                                    value={timeFilter}
+                                    options={timeOptions}
+                                    onChange={e => setTimeFilter(e.value)}
+                                    className="w-40 text-sm h-[38px] flex items-center"
                                 />
                                 {timeFilter === 'custom' && (
                                     <Calendar
@@ -236,7 +170,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
                                         inputClassName="text-sm h-[38px] px-3 py-2 border border-surface-300 rounded-lg"
                                     />
                                 )}
-                                <button onClick={handleExportCSV} disabled={filteredScores.length === 0} className="flex items-center gap-2 px-4 py-2 h-[38px] text-sm font-medium text-white bg-brand-600 border border-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm disabled:opacity-50">
+                                <button onClick={handleExportCSV} disabled={scoredReviews.length === 0} className="flex items-center gap-2 px-4 py-2 h-[38px] text-sm font-medium text-white bg-brand-600 border border-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm disabled:opacity-50">
                                     <Download size={16} /> Export CSV
                                 </button>
                             </div>
@@ -252,21 +186,21 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="bg-gradient-to-br from-success-light to-green-100 rounded-xl p-5 border border-green-200">
+                                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border border-green-200">
                                     <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-10 h-10 bg-success rounded-lg flex items-center justify-center"><FileCheck size={20} className="text-white" /></div>
+                                        <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center"><FileCheck size={20} className="text-white" /></div>
                                         <div>
                                             <p className="text-xs text-green-700 font-medium uppercase">Total Reviewed</p>
                                             <p className="text-2xl font-bold text-green-800">{totalReviewed}</p>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="bg-gradient-to-br from-warning-light to-amber-100 rounded-xl p-5 border border-amber-200">
+                                <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-5 border border-amber-200">
                                     <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-10 h-10 bg-warning rounded-lg flex items-center justify-center"><MessageSquare size={20} className="text-white" /></div>
+                                        <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center"><MessageSquare size={20} className="text-white" /></div>
                                         <div>
-                                            <p className="text-xs text-amber-700 font-medium uppercase">Pending Reviews</p>
-                                            <p className="text-2xl font-bold text-amber-800">{assignedDocs.length}</p>
+                                            <p className="text-xs text-amber-700 font-medium uppercase">In Progress</p>
+                                            <p className="text-2xl font-bold text-amber-800">{inProgressReviews.length}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -276,7 +210,7 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
                             <div className="bg-surface-50 rounded-xl p-5 border border-surface-200">
                                 <h3 className="text-sm font-semibold text-surface-700 mb-4">Review Scores (Last 10)</h3>
                                 <div style={{ height: '280px' }}>
-                                    {filteredScores.length > 0 ? (
+                                    {scoredReviews.length > 0 ? (
                                         <Chart type="bar" data={chartData} options={chartOptions} />
                                     ) : (
                                         <div className="flex items-center justify-center h-full text-surface-400 text-sm">No score data available</div>
@@ -285,82 +219,63 @@ export default function ReviewerDashboard({ defaultTab = 'dashboard' }: Props) {
                             </div>
 
                             {/* Scores Table */}
-                            <DataTable value={filteredScores} paginator rows={10} emptyMessage="No scores yet" stripedRows rowHover className="text-sm">
+                            <DataTable value={scoredReviews} paginator rows={10} emptyMessage="No scores yet" stripedRows rowHover className="text-sm">
                                 <Column field="title" header="Document" sortable />
                                 <Column field="designer_name" header="Designer" sortable />
-                                <Column field="quality" header="Quality" sortable />
-                                <Column field="composite_score" header="Score" sortable body={(r: Score) => <span className="font-semibold">{r.composite_score.toFixed(2)}</span>} />
-                                <Column field="created_at" header="Date" sortable body={(r: Score) => new Date(r.created_at).toLocaleDateString()} />
+                                <Column header="Quality" sortable body={(r: Review) => r.score?.quality} />
+                                <Column header="Score" sortable body={(r: Review) => <span className="font-semibold">{r.score?.composite_score.toFixed(2)}</span>} />
+                                <Column field="created_at" header="Date" sortable body={(r: Review) => new Date(r.created_at).toLocaleDateString()} />
                             </DataTable>
                         </div>
                     </TabPanel>
 
-                    {/* Assigned Files Tab */}
-                    <TabPanel headerTemplate={tabHeaderTemplate('Assigned Files', 'pi pi-file mr-2', 1)}>
-                        <DataTable value={assignedDocs} loading={loading} paginator rows={10} emptyMessage="No files assigned for review" stripedRows rowHover className="text-sm">
+                    {/* In Progress Tab */}
+                    <TabPanel headerTemplate={tabHeaderTemplate('In Progress', 'pi pi-file mr-2', 1)}>
+                        <DataTable value={inProgressReviews} paginator rows={10} emptyMessage="No files in progress" stripedRows rowHover className="text-sm">
                             <Column field="title" header="File Name" sortable />
                             <Column field="job_id" header="Job ID" sortable />
                             <Column field="designer_name" header="Designer" sortable />
                             <Column field="deliverable_type" header="Type" sortable className="capitalize" />
                             <Column field="status" header="Status" body={statusTemplate} sortable />
-                            <Column header="Action" body={(rowData: DocType) => (
-                                <button
-                                    onClick={() => handleStartReview(rowData)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
-                                >
-                                    <Play size={14} /> {rowData.status === 'in_review' ? 'Continue Review' : 'Start Review'}
-                                </button>
+                            <Column header="Action" body={(rowData: Review) => (
+                                rowData.fileBlobUrl ? (
+                                    <button
+                                        onClick={() => navigate(`/review/${rowData.id}`)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+                                    >
+                                        <Play size={14} /> Continue Review
+                                    </button>
+                                ) : (
+                                    <span className="text-xs text-surface-400 italic">File unavailable (reload page)</span>
+                                )
                             )} />
                         </DataTable>
                     </TabPanel>
 
                     {/* Completed Files Tab */}
-                    <TabPanel headerTemplate={tabHeaderTemplate('Completed Files', 'pi pi-check-circle mr-2', 2)}>
-                        <DataTable value={completedDocs} loading={loading} paginator rows={10} emptyMessage="No completed files" stripedRows rowHover className="text-sm">
+                    <TabPanel headerTemplate={tabHeaderTemplate('Completed', 'pi pi-check-circle mr-2', 2)}>
+                        <DataTable value={completedReviews} paginator rows={10} emptyMessage="No completed reviews" stripedRows rowHover className="text-sm">
                             <Column field="title" header="File Name" sortable />
                             <Column field="job_id" header="Job ID" sortable />
                             <Column field="designer_name" header="Designer" sortable />
                             <Column field="deliverable_type" header="Type" sortable className="capitalize" />
-                            <Column field="status" header="Status" body={statusTemplate} sortable />
-                            <Column header="Action" body={(rowData: DocType) => (
+                            <Column header="Score" body={(r: Review) => r.score ? <span className="font-semibold">{r.score.composite_score.toFixed(2)}</span> : '—'} />
+                            <Column header="Action" body={(rowData: Review) => (
                                 <div className="flex items-center gap-2">
-                                    <button onClick={() => navigate(`/reviewer/view/${rowData.id}`)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-surface-300 text-surface-700 rounded hover:bg-surface-50 transition-colors" title="View">
+                                    <button onClick={() => navigate(`/view/${rowData.id}`)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-surface-300 text-surface-700 rounded hover:bg-surface-50 transition-colors" title="View">
                                         <Eye size={14} /> View
                                     </button>
-                                    <button onClick={() => handleDownloadPdf(rowData)} disabled={downloadingId === rowData.id} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-brand-300 text-brand-700 rounded hover:bg-brand-50 transition-colors disabled:opacity-50" title="Save as PDF">
-                                        {downloadingId === rowData.id ? <i className="pi pi-spin pi-spinner text-[14px]" /> : <Download size={14} />} PDF
-                                    </button>
-                                    <button onClick={() => handleReopenFile(rowData)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-brand-600 text-white rounded hover:bg-brand-700 transition-colors">
-                                        <MessageSquare size={14} /> Reopen
-                                    </button>
+                                    {rowData.fileBlobUrl && (
+                                        <button onClick={() => navigate(`/review/${rowData.id}`)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-brand-600 text-white rounded hover:bg-brand-700 transition-colors">
+                                            <MessageSquare size={14} /> Reopen
+                                        </button>
+                                    )}
                                 </div>
                             )} />
                         </DataTable>
                     </TabPanel>
                 </TabView>
             </div>
-
-            {/* Export CSV Dialog Replaced Since It was Moved to Dashboard Header (Intentionally empty placeholder) */}
         </div>
     );
-}
-
-function filterByTime(scores: Score[], period: string, customRange?: Date[] | null): Score[] {
-    if (period === 'all') return scores;
-    const now = new Date();
-    return scores.filter(s => {
-        const d = new Date(s.created_at);
-        if (period === 'week') {
-            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            return d >= weekAgo;
-        }
-        if (period === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        if (period === 'year') return d.getFullYear() === now.getFullYear();
-        if (period === 'custom' && customRange && customRange[0] && customRange[1]) {
-            const end = new Date(customRange[1]);
-            end.setHours(23, 59, 59, 999);
-            return d >= customRange[0] && d <= end;
-        }
-        return true;
-    });
 }
