@@ -77,12 +77,15 @@ const exportPdfNative = async (fileInfo: UploadedFile, annotations: Annotation[]
         borderOpacity: 1,
       });
 
+      const combinedText = [ann.predefined_comment, ann.comment].filter(Boolean).join('\n\n');
+      const fullComment = combinedText ? `${ann.error_category || 'Comment'} - ${combinedText}` : (ann.error_category || 'Comment');
+
       // We replace static text with a native PDF text annotation (sticky note)
       const annotObj = pdfDoc.context.obj({
         Type: 'Annot',
         Subtype: 'Text',
         Rect: [rectX, rectY, rectX + rectW, rectY + rectH],
-        Contents: PDFString.of(ann.comment),
+        Contents: PDFString.of(fullComment || ''),
         T: PDFString.of(`${SEVERITY_LABELS[ann.severity]} Comment`),
         Open: false,
         Name: PDFName.of('Note')
@@ -124,10 +127,13 @@ const exportImageAsPdf = async (element: HTMLElement, annotations: Annotation[],
     const rectW = (ann.width / 100) * width;
     const rectH = (ann.height / 100) * height;
 
+    const combinedText = [ann.predefined_comment, ann.comment].filter(Boolean).join('\n\n');
+    const fullComment = combinedText ? `${ann.error_category || 'Comment'} - ${combinedText}` : (ann.error_category || 'Comment');
+
     (pdf as any).createAnnotation({
       type: 'text',
       title: `${SEVERITY_LABELS[ann.severity]} Comment`,
-      contents: ann.comment,
+      contents: fullComment || '',
       bounds: { x: rectX, y: rectY, w: rectW, h: rectH },
       open: false
     });
@@ -144,6 +150,8 @@ const exportCsv = (annotations: Annotation[], metadata: DocumentMetadata, fileNa
     'Delivery Type': metadata.deliveryType,
     'Page Number': ann.pageNumber || 1,
     'Severity': SEVERITY_LABELS[ann.severity],
+    'Category': ann.error_category || '',
+    'Predefined Comment': ann.predefined_comment || '',
     'Comment': ann.comment,
   }));
 

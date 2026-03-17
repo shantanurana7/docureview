@@ -10,16 +10,25 @@ export enum Severity {
   CRITICAL = 'CRITICAL'
 }
 
+export enum ErrorCategory {
+  DESIGN = 'Design',
+  LAYOUT = 'Layout',
+  EDITORIAL = 'Editorial',
+  BRAND = 'Brand'
+}
+
 export interface Annotation {
   id: string;
   type: ShapeType;
   pageNumber: number; // 1-indexed
   severity: Severity;
+  error_category?: ErrorCategory;
   x: number; // percentage (0-100) relative to container width
   y: number; // percentage (0-100) relative to container height
   width: number; // percentage
   height: number; // percentage
   comment: string;
+  predefined_comment?: string;
   timestamp: number;
 }
 

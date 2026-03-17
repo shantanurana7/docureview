@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadedFile, ShapeType, Annotation, Severity } from '../types';
+import { UploadedFile, ShapeType, Annotation, Severity, ErrorCategory } from '../types';
 import { AnnotationModal } from './AnnotationModal';
 import { Trash2 } from 'lucide-react';
 import { SEVERITY_COLORS } from '../constants';
@@ -17,7 +17,7 @@ interface ViewerProps {
   activeTool: ShapeType;
   onAddAnnotation: (annotation: Annotation) => void;
   onRemoveAnnotation: (id: string) => void;
-  onUpdateAnnotation: (id: string, newComment: string) => void;
+  onUpdateAnnotation: (id: string, newComment: string, newSeverity?: string, newErrorCat?: string, newPredefined?: string) => void;
   viewerRef: React.RefObject<HTMLDivElement>;
 }
 
@@ -152,20 +152,22 @@ export const Viewer: React.FC<ViewerProps> = ({
     setModalOpen(true);
   };
 
-  const handleCommentSubmit = (comment: string, severity: Severity) => {
+  const handleCommentSubmit = (comment: string, severity: Severity, errorCategory: ErrorCategory, predefinedComment: string) => {
     if (editingId) {
-      onUpdateAnnotation(editingId, comment); // (UI Note: To keep simple, editing severity isn't strictly requested, mostly creating)
+      onUpdateAnnotation(editingId, comment, severity, errorCategory, predefinedComment);
     } else if (tempShape) {
       const newAnnotation: Annotation = {
         id: crypto.randomUUID(),
         type: tempShape.type || ShapeType.RECTANGLE,
         pageNumber: file?.type === 'pdf' ? currentPage : 1,
         severity,
+        error_category: errorCategory,
         x: tempShape.x || 0,
         y: tempShape.y || 0,
         width: tempShape.width || 0,
         height: tempShape.height || 0,
         comment,
+        predefined_comment: predefinedComment,
         timestamp: Date.now(),
       };
       onAddAnnotation(newAnnotation);
@@ -359,6 +361,8 @@ export const Viewer: React.FC<ViewerProps> = ({
         position={modalPos}
         initialComment={editingAnnotation?.comment}
         initialSeverity={editingAnnotation?.severity}
+        initialErrorCategory={editingAnnotation?.error_category}
+        initialPredefinedComment={editingAnnotation?.predefined_comment}
       />
     </div>
   );

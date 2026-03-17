@@ -1,0 +1,26 @@
+{
+  "Design": [
+    { "label": "Alignment Issue", "text": "Elements are not properly aligned according to the grid system." },
+    { "label": "Color Mismatch", "text": "The color used here does not match the brand guidelines." },
+    { "label": "Spacing/Padding", "text": "Inconsistent spacing or padding between elements." },
+    { "label": "Typography", "text": "Incorrect font family, size, or weight used." }
+  ],
+  "Layout": [
+    { "label": "Overlapping Elements", "text": "Content elements are overlapping and affecting readability." },
+    { "label": "Responsive Issue", "text": "The layout breaks or looks incorrect on this screen size." },
+    { "label": "Missing Section", "text": "A required section of the layout is missing here." },
+    { "label": "Margins", "text": "Page margins are incorrect." }
+  ],
+  "Editorial": [
+    { "label": "Typographical Error", "text": "There is a spelling or grammatical error here." },
+    { "label": "Tone/Voice", "text": "The language used does not match our brand tone." },
+    { "label": "Factual Error", "text": "The information presented here is factually incorrect." },
+    { "label": "Missing Copy", "text": "Required text or copy is missing from this section." }
+  ],
+  "Brand": [
+    { "label": "Logo Usage", "text": "Incorrect logo usage or placement." },
+    { "label": "Brand Assets", "text": "Outdated or incorrect brand assets are being used." },
+    { "label": "Guidelines Violation", "text": "This element violates core brand guidelines." },
+    { "label": "Imagery", "text": "The imagery used does not align with our brand style." }
+  ]
+}

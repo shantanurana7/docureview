@@ -50,9 +50,15 @@ const App: React.FC = () => {
     setAnnotations(prev => prev.filter(a => a.id !== id));
   }, []);
 
-  const handleUpdateAnnotation = useCallback((id: string, newComment: string) => {
+  const handleUpdateAnnotation = useCallback((id: string, newComment: string, newSeverity?: string, newErrorCat?: string, newPredefined?: string) => {
     setAnnotations(prev => prev.map(a => 
-      a.id === id ? { ...a, comment: newComment } : a
+      a.id === id ? { 
+        ...a, 
+        comment: newComment,
+        ...(newSeverity && { severity: newSeverity as any }),
+        ...(newErrorCat && { error_category: newErrorCat as any }),
+        ...(newPredefined !== undefined && { predefined_comment: newPredefined })
+      } : a
     ));
   }, []);
 
