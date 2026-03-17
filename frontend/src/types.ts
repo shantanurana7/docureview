@@ -54,6 +54,7 @@ export interface Annotation {
     width: number;
     height: number;
     comment: string;
+    predefined_comment?: string;
     timestamp?: number;
 }
 

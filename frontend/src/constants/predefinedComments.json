@@ -1,0 +1,42 @@
+{
+  "Design": [
+    {
+      "label": "Color Palette Deviation",
+      "text": "The selected colors do not align with our established brand guidelines. Please adjust the hex codes to match the official palette."
+    },
+    {
+      "label": "Inconsistent Spacing",
+      "text": "The padding and margins around this element are irregular. Please ensure spacing is uniform and follows the design system."
+    }
+  ],
+  "Layout": [
+    {
+      "label": "Misaligned Element",
+      "text": "This element is not properly anchored to the grid and appears misaligned. Please snap it to the correct grid lines for visual balance."
+    },
+    {
+      "label": "Overlapping Content",
+      "text": "The text or graphic here is overlapping with adjacent elements, hurting readability. Please provide more breathing room."
+    }
+  ],
+  "Editorial": [
+    {
+      "label": "Typographical Error",
+      "text": "There appears to be a spelling or typing mistake in this section. Please review the provided copy document and correct the text."
+    },
+    {
+      "label": "Grammatical Issue",
+      "text": "The phrasing here contains a grammatical error or awkward sentence structure. Please revise to ensure clear and professional communication."
+    }
+  ],
+  "Brand": [
+    {
+      "label": "Incorrect Logo Usage",
+      "text": "The logo applied here violates our brand standard usage rules (e.g., wrong aspect ratio, insufficient clear space, or unapproved color). Please replace it with the approved asset."
+    },
+    {
+      "label": "Off-Brand Tone",
+      "text": "The tone of voice in this section diverges from our core brand personality. Please rephrase this to sound more aligned with our brand identity."
+    }
+  ]
+}
