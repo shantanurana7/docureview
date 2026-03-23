@@ -96,7 +96,9 @@ export default function ViewReviewedPage() {
                         };
                         const c = hexToRgb(SEVERITY_COLORS[ann.severity]);
                         page.drawRectangle({ x: rX, y: rY, width: rW, height: rH, borderColor: rgb(c.r, c.g, c.b), borderWidth: 2, color: rgb(c.r, c.g, c.b), opacity: 0.2, borderOpacity: 1 });
-                        const annotObj = pdfDoc.context.obj({ Type: 'Annot', Subtype: 'Text', Rect: [rX, rY, rX + rW, rY + rH], Contents: PDFString.of(ann.comment), T: PDFString.of(ann.severity), Open: false, Name: PDFName.of('Note') });
+                        const combinedText = [ann.predefined_comment, ann.comment].filter(Boolean).join('\n\n');
+                        const fullComment = combinedText ? `${ann.error_category || 'Comment'} - ${combinedText}` : (ann.error_category || 'Comment');
+                        const annotObj = pdfDoc.context.obj({ Type: 'Annot', Subtype: 'Text', Rect: [rX, rY, rX + rW, rY + rH], Contents: PDFString.of(fullComment || ''), T: PDFString.of(ann.severity + ' Comment'), Open: false, Name: PDFName.of('Note') });
                         page.node.addAnnot(pdfDoc.context.register(annotObj));
                     }
                 });
@@ -207,7 +209,10 @@ export default function ViewReviewedPage() {
                                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: SEVERITY_COLORS[ann.severity] }} />
                                     <span className="text-[10px] text-surface-400 capitalize">{ann.severity.toLowerCase()} · {ann.error_category}</span>
                                 </div>
-                                <p className="text-xs leading-relaxed text-surface-700">{ann.comment}</p>
+                                <>
+                                    {ann.predefined_comment && <div className="font-semibold text-brand-700 bg-brand-50 p-1.5 rounded mb-1 border border-brand-100 italic flex text-[11px]">"{ann.predefined_comment}"</div>}
+                                    {ann.comment && <p className="text-xs leading-relaxed text-surface-700">{ann.comment}</p>}
+                                </>
                             </div>
                         ))
                     )}

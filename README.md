@@ -7,7 +7,8 @@ DocuReview is a lightweight, frontend-only web application for seamless document
 - **Storage**: Browser `localStorage` (session) and exportable JSON files (with Base64 embedded PDFs/Images).
 - **Features**: 
   - Real-time PDF and Image rendering
-  - Interactive Canvas annotations (rectangles, circles, severity/error tagging)
+  - Interactive Canvas annotations (rectangles, circles, severity/error tagging, Predefined Comments)
+  - Pagination Jump-to-Page for multipage PDFs
   - Export reviews to visually annotated PDFs
   - Local JSON state load/save and duplicate conflict resolution
   - Email notification Generation via `mailto` with review scores
