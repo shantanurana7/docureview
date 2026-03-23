@@ -10,6 +10,9 @@ import { ArrowLeft, Square, Circle, Save, SendHorizontal, Trash2, Download, Info
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { PDFDocument, rgb, PDFString, PDFName } from 'pdf-lib';
+import predefinedCommentsData from '../constants/predefinedComments.json';
+
+const PREDEFINED_MAP = predefinedCommentsData as Record<string, {label: string, text: string}[]>;
 
 declare global { interface Window { pdfjsLib: any; } }
 
@@ -41,6 +44,7 @@ export default function ReviewPage() {
     const [comment, setComment] = useState('');
     const [severity, setSeverity] = useState<Severity>(Severity.MINOR);
     const [errorCat, setErrorCat] = useState<ErrorCategory>(ErrorCategory.DESIGN);
+    const [predefinedComment, setPredefinedComment] = useState('');
     const [tempShape, setTempShape] = useState<Partial<Annotation> | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -49,6 +53,7 @@ export default function ReviewPage() {
     const [isLoadingPdf, setIsLoadingPdf] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [numPages, setNumPages] = useState<number | null>(null);
+    const [jumpPage, setJumpPage] = useState('1');
 
     // Sidebar edit
     const [sidebarEditId, setSidebarEditId] = useState<string | null>(null);
@@ -162,9 +167,9 @@ export default function ReviewPage() {
     };
 
     const handleCommentSave = () => {
-        if (!comment.trim()) return;
+        if (!comment.trim() && !predefinedComment.trim()) return;
         if (editingId) {
-            setAnnotations(prev => prev.map(a => a.id === editingId ? { ...a, comment, severity, error_category: errorCat } : a));
+            setAnnotations(prev => prev.map(a => a.id === editingId ? { ...a, comment, predefined_comment: predefinedComment, severity, error_category: errorCat } : a));
         } else if (tempShape) {
             const newAnn: Annotation = {
                 id: crypto.randomUUID(),
@@ -175,6 +180,7 @@ export default function ReviewPage() {
                 x: tempShape.x || 0, y: tempShape.y || 0,
                 width: tempShape.width || 0, height: tempShape.height || 0,
                 comment,
+                predefined_comment: predefinedComment,
                 timestamp: Date.now(),
             };
             setAnnotations(prev => [...prev, newAnn]);
@@ -187,6 +193,7 @@ export default function ReviewPage() {
         setCurrentRect(null);
         setTempShape(null);
         setEditingId(null);
+        setPredefinedComment('');
     };
 
     const handleAnnotationClick = (e: React.MouseEvent, ann: Annotation) => {
@@ -195,6 +202,7 @@ export default function ReviewPage() {
         setComment(ann.comment);
         setSeverity(ann.severity);
         setErrorCat(ann.error_category || ErrorCategory.DESIGN);
+        setPredefinedComment(ann.predefined_comment || '');
         setCommentModalOpen(true);
     };
 
@@ -239,7 +247,9 @@ export default function ReviewPage() {
                         };
                         const c = hexToRgb(SEVERITY_COLORS[ann.severity]);
                         page.drawRectangle({ x: rX, y: rY, width: rW, height: rH, borderColor: rgb(c.r, c.g, c.b), borderWidth: 2, color: rgb(c.r, c.g, c.b), opacity: 0.2, borderOpacity: 1 });
-                        const annotObj = pdfDoc.context.obj({ Type: 'Annot', Subtype: 'Text', Rect: [rX, rY, rX + rW, rY + rH], Contents: PDFString.of(ann.comment), T: PDFString.of(ann.severity), Open: false, Name: PDFName.of('Note') });
+                        const combinedText = [ann.predefined_comment, ann.comment].filter(Boolean).join('\n\n');
+                        const fullComment = combinedText ? `${ann.error_category || 'Comment'} - ${combinedText}` : (ann.error_category || 'Comment');
+                        const annotObj = pdfDoc.context.obj({ Type: 'Annot', Subtype: 'Text', Rect: [rX, rY, rX + rW, rY + rH], Contents: PDFString.of(fullComment || ''), T: PDFString.of(ann.severity + ' Comment'), Open: false, Name: PDFName.of('Note') });
                         const annotRef = pdfDoc.context.register(annotObj);
                         page.node.addAnnot(annotRef);
                     }
@@ -350,10 +360,25 @@ export default function ReviewPage() {
 
                 {/* PDF pagination */}
                 {isPdf && numPages && numPages > 1 && (
-                    <div className="mt-4 bg-white px-4 py-2 rounded-full shadow-md border border-surface-200 flex items-center gap-3 shrink-0">
-                        <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)} className="text-sm font-medium hover:bg-surface-100 p-1 rounded disabled:opacity-50">← Prev</button>
-                        <span className="text-sm text-surface-600 font-medium">Page {currentPage} of {numPages}</span>
-                        <button disabled={currentPage >= numPages} onClick={() => setCurrentPage(p => p + 1)} className="text-sm font-medium hover:bg-surface-100 p-1 rounded disabled:opacity-50">Next →</button>
+                    <div className="mt-4 bg-white px-4 py-2 rounded-full shadow-md border border-surface-200 flex items-center gap-3 shrink-0 z-10 relative">
+                        <button disabled={currentPage <= 1} onClick={() => { setCurrentPage(p => p - 1); setJumpPage(String(currentPage - 1)); }} className="text-sm font-medium hover:bg-surface-100 p-1 rounded disabled:opacity-50">← Prev</button>
+                        <div className="flex items-center gap-2 text-sm text-surface-600 font-medium">
+                            <span>Page</span>
+                            <input
+                                type="text"
+                                value={jumpPage}
+                                onChange={e => setJumpPage(e.target.value)}
+                                disabled={isLoadingPdf}
+                                onBlur={() => {
+                                    const p = parseInt(jumpPage, 10);
+                                    if (isNaN(p) || p < 1 || p > numPages) { alert(`Invalid page.`); setJumpPage(String(currentPage)); } else { setCurrentPage(p); }
+                                }}
+                                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                className="w-12 text-center py-1 border border-surface-300 rounded focus:ring-2 focus:ring-brand-500 outline-none disabled:opacity-50"
+                            />
+                            <span>of {numPages}</span>
+                        </div>
+                        <button disabled={currentPage >= numPages} onClick={() => { setCurrentPage(p => p + 1); setJumpPage(String(currentPage + 1)); }} className="text-sm font-medium hover:bg-surface-100 p-1 rounded disabled:opacity-50">Next →</button>
                     </div>
                 )}
             </div>
@@ -408,11 +433,14 @@ export default function ReviewPage() {
                                             <textarea value={sidebarEditComment} onChange={e => setSidebarEditComment(e.target.value)} className="w-full p-2 border rounded text-xs focus:ring-1 focus:ring-brand-500 outline-none resize-none" rows={3} autoFocus />
                                             <div className="flex justify-end gap-1">
                                                 <button onClick={() => setSidebarEditId(null)} className="p-1 text-surface-500 hover:bg-surface-100 rounded"><X size={14} /></button>
-                                                <button onClick={() => { if (sidebarEditComment.trim()) { setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, comment: sidebarEditComment } : a)); setSidebarEditId(null); } }} className="p-1 text-white bg-brand-600 hover:bg-brand-700 rounded"><Check size={14} /></button>
+                                                <button onClick={() => { if (sidebarEditComment.trim() || ann.predefined_comment) { setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, comment: sidebarEditComment } : a)); setSidebarEditId(null); } }} className="p-1 text-white bg-brand-600 hover:bg-brand-700 rounded"><Check size={14} /></button>
                                             </div>
                                         </div>
                                     ) : (
-                                        <p className="text-surface-700 text-xs leading-relaxed">{ann.comment}</p>
+                                        <>
+                                            {ann.predefined_comment && <div className="font-semibold text-brand-700 bg-brand-50 p-1.5 rounded mb-1 border border-brand-100 italic flex text-[11px]">"{ann.predefined_comment}"</div>}
+                                            {ann.comment && <p className="text-surface-700 text-xs leading-relaxed">{ann.comment}</p>}
+                                        </>
                                     )}
                                 </div>
                             ))}
@@ -440,24 +468,35 @@ export default function ReviewPage() {
                     <div className="absolute inset-0 bg-transparent" style={{ pointerEvents: 'auto' }} onClick={closeCommentModal} />
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl border border-surface-200 p-5 w-80 animate-fade-in" style={{ pointerEvents: 'auto' }}>
                         <h3 className="text-sm font-semibold text-surface-700 mb-3">{editingId ? 'Edit Comment' : 'Add Comment'}</h3>
-                        <textarea value={comment} onChange={e => setComment(e.target.value)} className="w-full h-24 p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none resize-none" placeholder="Describe the issue..." autoFocus />
-                        <div className="flex gap-2 mt-2">
+                        <div className="flex gap-2">
                             <select value={severity} onChange={e => setSeverity(e.target.value as Severity)} className="flex-1 p-2 border rounded-lg text-sm bg-surface-50 outline-none focus:ring-2 focus:ring-brand-500">
                                 <option value={Severity.MINOR}>Minor</option>
                                 <option value={Severity.MODERATE}>Moderate</option>
                                 <option value={Severity.MAJOR}>Major</option>
                                 <option value={Severity.CRITICAL}>Critical</option>
                             </select>
-                            <select value={errorCat} onChange={e => setErrorCat(e.target.value as ErrorCategory)} className="flex-1 p-2 border rounded-lg text-sm bg-surface-50 outline-none focus:ring-2 focus:ring-brand-500">
+                            <select value={errorCat} onChange={e => { setErrorCat(e.target.value as ErrorCategory); setPredefinedComment(''); }} className="flex-1 p-2 border rounded-lg text-sm bg-surface-50 outline-none focus:ring-2 focus:ring-brand-500">
                                 <option value={ErrorCategory.DESIGN}>Design</option>
                                 <option value={ErrorCategory.LAYOUT}>Layout</option>
                                 <option value={ErrorCategory.EDITORIAL}>Editorial</option>
                                 <option value={ErrorCategory.BRAND}>Brand</option>
                             </select>
                         </div>
+                        <div className="mt-2">
+                            <label className="block text-xs font-semibold text-surface-600 mb-1">Predefined Comment (Optional)</label>
+                            <select value={predefinedComment} onChange={e => setPredefinedComment(e.target.value)} className="w-full p-2 border rounded-lg text-sm bg-surface-50 outline-none focus:ring-2 focus:ring-brand-500">
+                                <option value="">-- Select a predefined comment --</option>
+                                {PREDEFINED_MAP[errorCat]?.map((c, idx) => (
+                                    <option key={idx} value={c.text}>{c.label}</option>
+                                ))}
+                            </select>
+                            {predefinedComment && <p className="mt-1.5 text-[11px] leading-snug text-brand-600 italic px-1">"{predefinedComment}"</p>}
+                        </div>
+                        <div className="mt-2 text-xs font-semibold text-surface-600 mb-1">Additional Info</div>
+                        <textarea value={comment} onChange={e => setComment(e.target.value)} className="w-full h-20 p-2 border rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none resize-none" placeholder="Describe the issue..." autoFocus />
                         <div className="flex justify-end gap-2 mt-3">
                             <button onClick={closeCommentModal} className="px-3 py-1.5 text-xs font-medium text-surface-600 hover:bg-surface-100 rounded-lg">Cancel</button>
-                            <button onClick={handleCommentSave} disabled={!comment.trim()} className="px-3 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg disabled:opacity-50">{editingId ? 'Update' : 'Save'}</button>
+                            <button onClick={handleCommentSave} disabled={!comment.trim() && !predefinedComment.trim()} className="px-3 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg disabled:opacity-50">{editingId ? 'Update' : 'Save'}</button>
                         </div>
                     </div>
                 </div>

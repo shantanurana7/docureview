@@ -18,8 +18,8 @@ router.post('/:documentId', (req, res) => {
 
     const db = getDb();
     const deleteStmt = db.prepare('DELETE FROM annotations WHERE document_id = ?');
-    const insertStmt = db.prepare(`INSERT INTO annotations (id, document_id, type, page_number, severity, error_category, x, y, width, height, comment, is_resolved) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertStmt = db.prepare(`INSERT INTO annotations (id, document_id, type, page_number, severity, error_category, x, y, width, height, comment, predefined_comment, is_resolved) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     try {
         db.exec('BEGIN');
@@ -37,6 +37,7 @@ router.post('/:documentId', (req, res) => {
                 ann.width,
                 ann.height,
                 ann.comment,
+                ann.predefined_comment || '',
                 ann.is_resolved || 0
             );
         }

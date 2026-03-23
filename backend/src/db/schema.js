@@ -61,6 +61,7 @@ function initTables() {
       width REAL NOT NULL,
       height REAL NOT NULL,
       comment TEXT NOT NULL,
+      predefined_comment TEXT DEFAULT '',
       is_resolved INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
@@ -91,6 +92,12 @@ function initTables() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
+
+  try {
+    db.exec(`ALTER TABLE annotations ADD COLUMN predefined_comment TEXT DEFAULT ''`);
+  } catch (e) {
+    // Ignore if column already exists
+  }
 }
 
 function seedAdmin() {

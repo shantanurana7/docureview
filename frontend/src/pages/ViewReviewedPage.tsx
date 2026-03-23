@@ -202,7 +202,10 @@ export default function ViewReviewedPage() {
                                             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: SEVERITY_COLORS[ann.severity] }} />
                                             <span className="text-[10px] text-surface-400 capitalize">{ann.severity.toLowerCase()}</span>
                                         </div>
-                                        <p className={`text-xs leading-relaxed ${ann.is_resolved ? 'line-through text-surface-400' : 'text-surface-700'}`}>{ann.comment}</p>
+                                        <>
+                                            {ann.predefined_comment && <div className={`font-semibold text-brand-700 bg-brand-50 p-1.5 rounded mb-1 border border-brand-100 italic flex text-[11px] ${ann.is_resolved ? 'opacity-50' : ''}`}>"{ann.predefined_comment}"</div>}
+                                            {ann.comment && <p className={`text-xs leading-relaxed ${ann.is_resolved ? 'line-through text-surface-400' : 'text-surface-700'}`}>{ann.comment}</p>}
+                                        </>
                                     </div>
                                 </div>
                             </div>

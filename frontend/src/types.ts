@@ -61,6 +61,7 @@ export interface Annotation {
     width: number;
     height: number;
     comment: string;
+    predefined_comment?: string;
     error_category: ErrorCategory;
     timestamp?: number;
     is_resolved?: number;
