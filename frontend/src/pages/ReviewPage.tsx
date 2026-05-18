@@ -383,7 +383,7 @@ export default function ReviewPage() {
 
                                 {/* Bottom logo — horizontal */}
                                 <img src={LOGO_SRC} alt="Logo bottom" draggable={false}
-                                    style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block' }}
+                                    style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }}
                                 />
 
                                 {/* Drag hint */}
