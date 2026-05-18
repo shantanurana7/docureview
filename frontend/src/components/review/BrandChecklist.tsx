@@ -26,6 +26,7 @@ export interface LogoOverlayState {
     active: boolean;
     pos: { x: number; y: number };
     scale: number;
+    opacity: number;
     testResult: 'ok' | 'not_ok' | null;
     testComment: string;
 }
@@ -61,7 +62,7 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
     const handleStartTest = () => {
         setLogoTestResult(null);
         setLogoComment('');
-        onOverlayChange({ active: true, pos: { x: 0, y: 0 }, scale: 1, testResult: null, testComment: '' });
+        onOverlayChange({ active: true, pos: { x: 0, y: 0 }, scale: 1, opacity: 1, testResult: null, testComment: '' });
     };
 
     const handleLogoResultChange = (val: LogoTestResult) => {
@@ -151,6 +152,18 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
                                                 className="flex-1 h-1.5 accent-brand-600"
                                             />
                                             <span className="text-[10px] text-surface-500 w-8 text-right">{overlayState.scale.toFixed(1)}x</span>
+                                        </div>
+
+                                        {/* Opacity slider */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-surface-500 w-10">Opacity</span>
+                                            <input
+                                                type="range" min={0.1} max={1} step={0.05}
+                                                value={overlayState.opacity ?? 1}
+                                                onChange={e => onOverlayChange({ ...overlayState, opacity: parseFloat(e.target.value) })}
+                                                className="flex-1 h-1.5 accent-brand-600"
+                                            />
+                                            <span className="text-[10px] text-surface-500 w-8 text-right">{Math.round((overlayState.opacity ?? 1) * 100)}%</span>
                                         </div>
 
                                         {/* Result dropdown */}

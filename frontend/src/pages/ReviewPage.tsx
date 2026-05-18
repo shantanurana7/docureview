@@ -5,11 +5,13 @@ import { getReviewById, updateAnnotations } from '../services/localStore';
 import { Review, Annotation, ShapeType } from '../types';
 import { ArrowLeft, Square, Save, FileDown, Trash2, Pencil, Check, X, Info } from 'lucide-react';
 import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+import { PDFDocument, PDFName, PDFString, rgb } from 'pdf-lib';
 import BrandChecklist, { LogoOverlayState } from '../components/review/BrandChecklist';
 
 const HIGHLIGHT_COLOR = '#6366f1';
 const LOGO_SRC = '/KPMG_blue_logo.svg';
+// SVG viewBox: 80.58 × 32.08 → aspect ratio ≈ 2.514 : 1
+const LOGO_ASPECT = 80.58 / 32.08; // ≈ 2.514
 const LOGO_BASE_W = 120; // px at scale 1
 
 export default function ReviewPage() {
@@ -38,7 +40,9 @@ export default function ReviewPage() {
     const [sidebarEditComment, setSidebarEditComment] = useState('');
 
     // Logo overlay state (owned here so overlay renders inside canvas)
-    const [logoOverlay, setLogoOverlay] = useState<LogoOverlayState>({ active: false, pos: { x: 0, y: 0 }, scale: 1, testResult: null, testComment: '' });
+    const [logoOverlay, setLogoOverlay] = useState<LogoOverlayState>({ active: false, pos: { x: 0, y: 0 }, scale: 1, opacity: 1, testResult: null, testComment: '' });
+    // When true, logo is hidden so html2canvas excludes it from the PDF capture
+    const [logoHiddenForCapture, setLogoHiddenForCapture] = useState(false);
     const logoDragging = useRef(false);
     const logoDragStart = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
 
@@ -167,81 +171,111 @@ export default function ReviewPage() {
     const handleSaveAsPdf = async () => {
         if (!viewerRef.current || !review) return;
         try {
-            // Capture the canvas area (image + annotation overlays)
-            const canvasEl = await html2canvas(viewerRef.current, { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff' });
-            const imgData = canvasEl.toDataURL('image/png');
-            const imgW = canvasEl.width;
-            const imgH = canvasEl.height;
+            // ── Step 1: Capture image WITHOUT logo overlay ─────────────────
+            setLogoHiddenForCapture(true);
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); // wait 2 frames
+            const canvasEl = await html2canvas(viewerRef.current, {
+                scale: 2, useCORS: true, logging: false, backgroundColor: '#fff',
+            });
+            setLogoHiddenForCapture(false);
 
-            // Page size = image size in points (pt), 1pt ≈ 1px at 72dpi
-            const pdf = new jsPDF({ orientation: imgW > imgH ? 'l' : 'p', unit: 'px', format: [imgW, imgH], compress: true });
-            pdf.addImage(imgData, 'PNG', 0, 0, imgW, imgH);
+            const imgDataUrl = canvasEl.toDataURL('image/png');
+            const base64 = imgDataUrl.split(',')[1];
+            const imgBytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 
-            // ── Comments section on a new page ───────────────────────────
-            const hasComments = annotations.length > 0 || (logoOverlay.testResult === 'not_ok' && logoOverlay.testComment);
-            if (hasComments) {
-                pdf.addPage();
-                const margin = 40;
-                let y = 50;
-                const lineH = 18;
-                const pageW = pdf.internal.pageSize.getWidth();
+            const canvasW = canvasEl.width;   // physical pixels (scale 2)
+            const canvasH = canvasEl.height;
 
-                pdf.setFont('helvetica', 'bold');
-                pdf.setFontSize(14);
-                pdf.text('Review Comments', margin, y);
-                y += lineH * 1.5;
+            // ── Step 2: Build PDF with pdf-lib ─────────────────────────────
+            const pdfDoc = await PDFDocument.create();
+            const page = pdfDoc.addPage([canvasW, canvasH]);
 
-                pdf.setFont('helvetica', 'normal');
-                pdf.setFontSize(9);
-                pdf.setTextColor(100);
-                pdf.text(`File: ${review.title}   |   Job: ${review.job_id}   |   Designer: ${review.designer_name}`, margin, y);
-                y += lineH * 1.5;
+            // Embed and draw the captured image
+            const pngImage = await pdfDoc.embedPng(imgBytes);
+            page.drawImage(pngImage, { x: 0, y: 0, width: canvasW, height: canvasH });
 
-                // Annotation comments
-                if (annotations.length > 0) {
-                    pdf.setFont('helvetica', 'bold');
-                    pdf.setFontSize(11);
-                    pdf.setTextColor(30);
-                    pdf.text('Annotation Comments', margin, y);
-                    y += lineH;
+            // ── Step 3: Native annotations (sticky notes) ─────────────────
+            // pdf-lib coords: origin bottom-left, y increases upward
+            const hexToRgb = (hex: string) => {
+                const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                return m ? { r: parseInt(m[1], 16) / 255, g: parseInt(m[2], 16) / 255, b: parseInt(m[3], 16) / 255 } : { r: 0.4, g: 0.4, b: 1 };
+            };
+            const annColor = hexToRgb(HIGHLIGHT_COLOR);
 
-                    annotations.forEach((ann, i) => {
-                        pdf.setFont('helvetica', 'bold');
-                        pdf.setFontSize(9);
-                        pdf.setTextColor(99, 102, 241); // brand purple
-                        pdf.text(`#${i + 1}`, margin, y);
-                        pdf.setFont('helvetica', 'normal');
-                        pdf.setTextColor(50);
-                        const lines = pdf.splitTextToSize(ann.comment || '(no comment)', pageW - margin * 2 - 16);
-                        pdf.text(lines, margin + 16, y);
-                        y += lineH * lines.length + 6;
-                        if (y > pdf.internal.pageSize.getHeight() - 60) { pdf.addPage(); y = 50; }
-                    });
-                    y += lineH * 0.5;
-                }
+            // Each annotation: draw rectangle + attach Text (sticky note) annotation
+            annotations.forEach((ann, i) => {
+                // Convert % coords → pdf points (scale 2 → divide by 2 for logical px)
+                const ax = (ann.x / 100) * canvasW;
+                const aw = (ann.width / 100) * canvasW;
+                const ah = (ann.height / 100) * canvasH;
+                const ay = canvasH - ((ann.y / 100) * canvasH) - ah; // flip Y
 
-                // Logo test comment
-                if (logoOverlay.testResult === 'not_ok' && logoOverlay.testComment) {
-                    pdf.setFont('helvetica', 'bold');
-                    pdf.setFontSize(11);
-                    pdf.setTextColor(30);
-                    pdf.text('Logo Placement Test — Issue Flagged', margin, y);
-                    y += lineH;
-                    pdf.setFont('helvetica', 'normal');
-                    pdf.setFontSize(9);
-                    pdf.setTextColor(200, 50, 50);
-                    const lines = pdf.splitTextToSize(logoOverlay.testComment, pageW - margin * 2);
-                    pdf.text(lines, margin, y);
-                }
+                // Draw visible rectangle on page
+                page.drawRectangle({
+                    x: ax, y: ay, width: aw, height: ah,
+                    borderColor: rgb(annColor.r, annColor.g, annColor.b),
+                    borderWidth: 3,
+                    color: rgb(annColor.r, annColor.g, annColor.b),
+                    opacity: 0.15,
+                    borderOpacity: 0.9,
+                });
+
+                // Draw annotation number badge
+                page.drawCircle({ x: ax + 10, y: ay + ah - 10, size: 10, color: rgb(0.1, 0.1, 0.1) });
+
+                // Create native Text (sticky-note) annotation
+                const annotRef = pdfDoc.context.register(
+                    pdfDoc.context.obj({
+                        Type: 'Annot',
+                        Subtype: 'Text',
+                        Name: PDFName.of('Comment'),
+                        Rect: [ax, ay, ax + aw, ay + ah],
+                        Contents: PDFString.of(`#${i + 1}: ${ann.comment || '(no comment)'}`),
+                        T: PDFString.of('Brand Reviewer'),
+                        Open: false,
+                        C: [annColor.r, annColor.g, annColor.b],
+                    })
+                );
+                page.node.addAnnot(annotRef);
+            });
+
+            // Logo test comment — if flagged as not ok, add a separate sticky note
+            if (logoOverlay.testResult === 'not_ok' && logoOverlay.testComment) {
+                const ltRef = pdfDoc.context.register(
+                    pdfDoc.context.obj({
+                        Type: 'Annot',
+                        Subtype: 'Text',
+                        Name: PDFName.of('Note'),
+                        Rect: [20, canvasH - 80, 200, canvasH - 20],
+                        Contents: PDFString.of(`LOGO PLACEMENT — NOT OK:\n${logoOverlay.testComment}`),
+                        T: PDFString.of('Brand Reviewer'),
+                        Open: false,
+                        C: [0.9, 0.2, 0.2],
+                    })
+                );
+                page.node.addAnnot(ltRef);
             }
 
-            pdf.save(`${review.title}_brand-review.pdf`);
-        } catch (err) { console.error(err); alert('PDF export failed'); }
+            // ── Step 4: Save ───────────────────────────────────────────────
+            const pdfBytes = await pdfDoc.save();
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${review.title}_brand-review.pdf`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        } catch (err) {
+            setLogoHiddenForCapture(false);
+            console.error(err);
+            alert('PDF export failed: ' + String(err));
+        }
     };
 
-    // ── Logo sizing ───────────────────────────────────────────────────────────
+
+
+    // ── Logo sizing (SVG aspect 2.514:1) ─────────────────────────────────────
     const scaledW = LOGO_BASE_W * logoOverlay.scale;
-    const scaledH = Math.round(scaledW / 3); // ~3:1 ratio for KPMG logo
+    const scaledH = Math.round(scaledW / LOGO_ASPECT); // natural logo height
 
     // ── Guards ────────────────────────────────────────────────────────────────
     if (loading) return <div className="flex items-center justify-center h-screen"><i className="pi pi-spin pi-spinner text-4xl text-brand-600" /></div>;
@@ -307,63 +341,60 @@ export default function ReviewPage() {
                     </div>
 
                     {/* ── C-Shaped Logo Overlay ──────────────────────────────── */}
-                    {logoOverlay.active && (
-                        <div
-                            onMouseDown={handleLogoDragStart}
-                            style={{
-                                position: 'absolute',
-                                left: logoOverlay.pos.x,
-                                top: logoOverlay.pos.y,
-                                cursor: 'grab',
-                                userSelect: 'none',
-                                zIndex: 40,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'flex-start',
-                                width: scaledW,
-                                pointerEvents: 'auto',
-                            }}
-                        >
-                            {/* Top logo — horizontal */}
-                            <img src={LOGO_SRC} alt="Logo top" draggable={false}
-                                style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', flexShrink: 0 }}
-                            />
-                            {/* Middle logo — same logo, rotated 90° to sit vertically on the left
-                                CSS transform rotates around center but doesn't affect layout.
-                                We correct the clipping by using position:absolute in a wrapper
-                                sized to the post-rotation visual footprint: scaledH wide × scaledW tall */}
-                            <div style={{
-                                position: 'relative',
-                                width: scaledH,
-                                height: scaledW,
-                                flexShrink: 0,
-                            }}>
+                    {logoOverlay.active && !logoHiddenForCapture && (() => {
+                        return (
+                            <div
+                                onMouseDown={handleLogoDragStart}
+                                style={{
+                                    position: 'absolute',
+                                    left: logoOverlay.pos.x,
+                                    top: logoOverlay.pos.y,
+                                    cursor: 'grab',
+                                    userSelect: 'none',
+                                    zIndex: 40,
+                                    width: scaledW,
+                                    pointerEvents: 'auto',
+                                    opacity: logoOverlay.opacity ?? 1,
+                                }}
+                            >
+                                {/* Top logo — horizontal */}
+                                <img src={LOGO_SRC} alt="Logo top" draggable={false}
+                                    style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block' }}
+                                />
+
+                                {/* Middle logo — same scaledW×scaledH img, rotated 90° CW.
+                                    marginLeft/Right: negative = collapse layout width to scaledH
+                                    marginTop/Bottom: positive = expand layout height to scaledW */}
                                 <img src={LOGO_SRC} alt="Logo left" draggable={false}
                                     style={{
-                                        position: 'absolute',
                                         width: scaledW,
                                         height: scaledH,
                                         objectFit: 'contain',
-                                        // Center the rotated img inside the wrapper
-                                        top: (scaledW - scaledH) / 2,
-                                        left: (scaledH - scaledW) / 2,
+                                        display: 'block',
+                                        flexShrink: 0,
                                         transform: 'rotate(90deg)',
                                         transformOrigin: 'center center',
+                                        marginLeft: -(scaledW - scaledH) / 2,
+                                        marginRight: -(scaledW - scaledH) / 2,
+                                        marginTop: (scaledW - scaledH) / 2,
+                                        marginBottom: (scaledW - scaledH) / 2,
                                     }}
                                 />
+
+                                {/* Bottom logo — horizontal */}
+                                <img src={LOGO_SRC} alt="Logo bottom" draggable={false}
+                                    style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block' }}
+                                />
+
+                                {/* Drag hint */}
+                                <div style={{
+                                    fontSize: 9, color: '#6366f1', whiteSpace: 'nowrap',
+                                    background: 'rgba(255,255,255,0.85)', padding: '1px 5px',
+                                    borderRadius: 3, border: '1px solid #c7d2fe', marginTop: 2,
+                                }}>✥ drag to move</div>
                             </div>
-                            {/* Bottom logo — horizontal */}
-                            <img src={LOGO_SRC} alt="Logo bottom" draggable={false}
-                                style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', flexShrink: 0 }}
-                            />
-                            {/* Drag hint */}
-                            <div style={{
-                                fontSize: 9, color: '#6366f1', whiteSpace: 'nowrap',
-                                background: 'rgba(255,255,255,0.9)', padding: '1px 5px',
-                                borderRadius: 3, border: '1px solid #c7d2fe', marginTop: 2,
-                            }}>✥ drag to move</div>
-                        </div>
-                    )}
+                        );
+                    })()}
                 </div>
             </div>
 
