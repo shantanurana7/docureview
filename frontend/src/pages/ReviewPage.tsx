@@ -359,7 +359,7 @@ export default function ReviewPage() {
                             >
                                 {/* Top logo — horizontal */}
                                 <img src={LOGO_SRC} alt="Logo top" draggable={false}
-                                    style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block' }}
+                                    style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }}
                                 />
 
                                 {/* Middle logo — same scaledW×scaledH img, rotated 90° CW.
