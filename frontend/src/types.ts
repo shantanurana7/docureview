@@ -1,6 +1,5 @@
 // === Review Types ===
 export type ReviewStatus = 'in_progress' | 'reviewed';
-export type DeliverableType = 'assets' | 'ecomms' | 'marketing';
 
 export interface Review {
     id: string;
@@ -8,65 +7,47 @@ export interface Review {
     job_id: string;
     designer_name: string;
     designer_email: string;
-    deliverable_type: DeliverableType;
-    complexity: string;
     status: ReviewStatus;
     created_at: string;
     annotations: Annotation[];
-    score: ReviewScore | null;
+    score: null;
     // File data stored as base64 in JSON for persistence
     fileBase64?: string;
     // Runtime-only: the file blob (not saved to JSON)
     fileBlob?: Blob;
     fileBlobUrl?: string;
-    fileType?: 'pdf' | 'image';
+    fileType?: 'image';
     original_filename?: string;
 }
 
 // === Annotation Types ===
 export enum ShapeType {
     RECTANGLE = 'RECTANGLE',
-    CIRCLE = 'CIRCLE',
-}
-
-export enum Severity {
-    MINOR = 'MINOR',
-    MODERATE = 'MODERATE',
-    MAJOR = 'MAJOR',
-    CRITICAL = 'CRITICAL',
-}
-
-export enum ErrorCategory {
-    DESIGN = 'Design',
-    LAYOUT = 'Layout',
-    EDITORIAL = 'Editorial',
-    BRAND = 'Brand',
 }
 
 export interface Annotation {
     id: string;
     type: ShapeType;
     pageNumber: number;
-    severity: Severity;
-    error_category: ErrorCategory;
     x: number;
     y: number;
     width: number;
     height: number;
     comment: string;
-    predefined_comment?: string;
     timestamp?: number;
 }
 
-// === Score Types ===
-export interface ReviewScore {
-    quality: number;
-    complexity: number;
-    ftp: number;
-    design: number;
-    repeat_offence: number;
-    composite_score: number;
-}
+// === Brand Checklist Types ===
+export type Platform = 'linkedin' | 'twitter' | 'ecomms';
+
+export type StyleOption =
+    | 'style1.1'
+    | 'style1.2'
+    | 'style2'
+    | 'style3.1'
+    | 'style3.2';
+
+export type LogoTestResult = 'ok' | 'not_ok' | null;
 
 // === JSON Data File ===
 export interface DocuReviewData {

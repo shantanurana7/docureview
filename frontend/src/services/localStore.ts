@@ -1,4 +1,4 @@
-import { Review, DocuReviewData, ReviewScore, Annotation } from '../types';
+import { Review, DocuReviewData, Annotation } from '../types';
 
 const EMPTY_DATA: DocuReviewData = { reviews: [] };
 
@@ -61,7 +61,7 @@ export function mergeLoadedData(data: DocuReviewData): void {
 function restoreBlobFromBase64(review: Review): Review {
     if (review.fileBase64 && !review.fileBlobUrl) {
         try {
-            const mimeType = review.fileType === 'pdf' ? 'application/pdf' : 'image/png';
+            const mimeType = 'image/png';
             const binaryStr = atob(review.fileBase64);
             const bytes = new Uint8Array(binaryStr.length);
             for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
@@ -168,9 +168,7 @@ export function updateAnnotations(id: string, annotations: Annotation[]): void {
     updateReview(id, { annotations });
 }
 
-export function submitScore(id: string, score: ReviewScore): void {
-    updateReview(id, { score, status: 'reviewed' });
-}
+
 
 export function deleteReview(id: string): void {
     store = {
