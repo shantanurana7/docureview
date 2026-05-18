@@ -26,6 +26,8 @@ export interface LogoOverlayState {
     active: boolean;
     pos: { x: number; y: number };
     scale: number;
+    testResult: 'ok' | 'not_ok' | null;
+    testComment: string;
 }
 
 interface Props {
@@ -42,7 +44,7 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
     const resetTest = () => {
         setLogoTestResult(null);
         setLogoComment('');
-        onOverlayChange({ ...overlayState, active: false });
+        onOverlayChange({ ...overlayState, active: false, testResult: null, testComment: '' });
     };
 
     const handlePlatformChange = (val: Platform | '') => {
@@ -59,13 +61,14 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
     const handleStartTest = () => {
         setLogoTestResult(null);
         setLogoComment('');
-        onOverlayChange({ active: true, pos: { x: 20, y: 20 }, scale: 1 });
+        onOverlayChange({ active: true, pos: { x: 0, y: 0 }, scale: 1, testResult: null, testComment: '' });
     };
 
     const handleLogoResultChange = (val: LogoTestResult) => {
         setLogoTestResult(val);
-        if (val === 'not_ok') setLogoComment(NOT_OK_COMMENT);
-        else setLogoComment('');
+        const comment = val === 'not_ok' ? NOT_OK_COMMENT : '';
+        setLogoComment(comment);
+        onOverlayChange({ ...overlayState, testResult: val, testComment: comment });
     };
 
     return (
@@ -169,7 +172,10 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
                                                 <p className="text-[10px] text-red-500 font-medium">Issue flagged — edit comment if needed:</p>
                                                 <textarea
                                                     value={logoComment}
-                                                    onChange={e => setLogoComment(e.target.value)}
+                                                    onChange={e => {
+                                                        setLogoComment(e.target.value);
+                                                        onOverlayChange({ ...overlayState, testResult: 'not_ok', testComment: e.target.value });
+                                                    }}
                                                     className="w-full p-2 border border-red-300 rounded-lg text-[11px] resize-none focus:ring-2 focus:ring-red-400 outline-none leading-relaxed bg-red-50/40"
                                                     rows={4}
                                                 />

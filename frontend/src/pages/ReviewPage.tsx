@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { getReviewById, updateAnnotations } from '../services/localStore';
 import { Review, Annotation, ShapeType } from '../types';
-import { ArrowLeft, Square, Save, Download, Trash2, Pencil, Check, X, Info } from 'lucide-react';
+import { ArrowLeft, Square, Save, FileDown, Trash2, Pencil, Check, X, Info } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import BrandChecklist, { LogoOverlayState } from '../components/review/BrandChecklist';
 
 const HIGHLIGHT_COLOR = '#6366f1';
@@ -37,7 +38,7 @@ export default function ReviewPage() {
     const [sidebarEditComment, setSidebarEditComment] = useState('');
 
     // Logo overlay state (owned here so overlay renders inside canvas)
-    const [logoOverlay, setLogoOverlay] = useState<LogoOverlayState>({ active: false, pos: { x: 20, y: 20 }, scale: 1 });
+    const [logoOverlay, setLogoOverlay] = useState<LogoOverlayState>({ active: false, pos: { x: 0, y: 0 }, scale: 1, testResult: null, testComment: '' });
     const logoDragging = useRef(false);
     const logoDragStart = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
 
@@ -129,12 +130,21 @@ export default function ReviewPage() {
         logoDragging.current = true;
         logoDragStart.current = { mx: e.clientX, my: e.clientY, ox: logoOverlay.pos.x, oy: logoOverlay.pos.y };
         const onMove = (ev: MouseEvent) => {
-            if (!logoDragging.current) return;
+            if (!logoDragging.current || !viewerRef.current) return;
+            const canvas = viewerRef.current;
+            const canvasW = canvas.offsetWidth;
+            const canvasH = canvas.offsetHeight;
+            // Logo group dimensions: width=scaledW, height=3*scaledH (3 stacked logos)
+            const lw = LOGO_BASE_W * logoOverlay.scale;
+            const lh = Math.round(lw / 3);
+            const groupH = lh * 3;
+            const newX = logoDragStart.current.ox + ev.clientX - logoDragStart.current.mx;
+            const newY = logoDragStart.current.oy + ev.clientY - logoDragStart.current.my;
             setLogoOverlay(prev => ({
                 ...prev,
                 pos: {
-                    x: logoDragStart.current.ox + ev.clientX - logoDragStart.current.mx,
-                    y: logoDragStart.current.oy + ev.clientY - logoDragStart.current.my,
+                    x: Math.max(0, Math.min(newX, canvasW - lw)),
+                    y: Math.max(0, Math.min(newY, canvasH - groupH)),
                 },
             }));
         };
@@ -145,7 +155,7 @@ export default function ReviewPage() {
         };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
-    }, [logoOverlay.pos]);
+    }, [logoOverlay.pos, logoOverlay.scale]);
 
     // ── Actions ───────────────────────────────────────────────────────────────
     const handleSaveAnnotations = () => {
@@ -154,15 +164,79 @@ export default function ReviewPage() {
         alert('Annotations saved!');
     };
 
-    const handleDownloadImage = async () => {
+    const handleSaveAsPdf = async () => {
         if (!viewerRef.current || !review) return;
         try {
-            const canvas = await html2canvas(viewerRef.current, { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff' });
-            const link = document.createElement('a');
-            link.href = canvas.toDataURL('image/png');
-            link.download = `${review.title}_reviewed.png`;
-            link.click();
-        } catch (err) { console.error(err); alert('Export failed'); }
+            // Capture the canvas area (image + annotation overlays)
+            const canvasEl = await html2canvas(viewerRef.current, { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff' });
+            const imgData = canvasEl.toDataURL('image/png');
+            const imgW = canvasEl.width;
+            const imgH = canvasEl.height;
+
+            // Page size = image size in points (pt), 1pt ≈ 1px at 72dpi
+            const pdf = new jsPDF({ orientation: imgW > imgH ? 'l' : 'p', unit: 'px', format: [imgW, imgH], compress: true });
+            pdf.addImage(imgData, 'PNG', 0, 0, imgW, imgH);
+
+            // ── Comments section on a new page ───────────────────────────
+            const hasComments = annotations.length > 0 || (logoOverlay.testResult === 'not_ok' && logoOverlay.testComment);
+            if (hasComments) {
+                pdf.addPage();
+                const margin = 40;
+                let y = 50;
+                const lineH = 18;
+                const pageW = pdf.internal.pageSize.getWidth();
+
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(14);
+                pdf.text('Review Comments', margin, y);
+                y += lineH * 1.5;
+
+                pdf.setFont('helvetica', 'normal');
+                pdf.setFontSize(9);
+                pdf.setTextColor(100);
+                pdf.text(`File: ${review.title}   |   Job: ${review.job_id}   |   Designer: ${review.designer_name}`, margin, y);
+                y += lineH * 1.5;
+
+                // Annotation comments
+                if (annotations.length > 0) {
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(11);
+                    pdf.setTextColor(30);
+                    pdf.text('Annotation Comments', margin, y);
+                    y += lineH;
+
+                    annotations.forEach((ann, i) => {
+                        pdf.setFont('helvetica', 'bold');
+                        pdf.setFontSize(9);
+                        pdf.setTextColor(99, 102, 241); // brand purple
+                        pdf.text(`#${i + 1}`, margin, y);
+                        pdf.setFont('helvetica', 'normal');
+                        pdf.setTextColor(50);
+                        const lines = pdf.splitTextToSize(ann.comment || '(no comment)', pageW - margin * 2 - 16);
+                        pdf.text(lines, margin + 16, y);
+                        y += lineH * lines.length + 6;
+                        if (y > pdf.internal.pageSize.getHeight() - 60) { pdf.addPage(); y = 50; }
+                    });
+                    y += lineH * 0.5;
+                }
+
+                // Logo test comment
+                if (logoOverlay.testResult === 'not_ok' && logoOverlay.testComment) {
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(11);
+                    pdf.setTextColor(30);
+                    pdf.text('Logo Placement Test — Issue Flagged', margin, y);
+                    y += lineH;
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.setFontSize(9);
+                    pdf.setTextColor(200, 50, 50);
+                    const lines = pdf.splitTextToSize(logoOverlay.testComment, pageW - margin * 2);
+                    pdf.text(lines, margin, y);
+                }
+            }
+
+            pdf.save(`${review.title}_brand-review.pdf`);
+        } catch (err) { console.error(err); alert('PDF export failed'); }
     };
 
     // ── Logo sizing ───────────────────────────────────────────────────────────
@@ -251,43 +325,35 @@ export default function ReviewPage() {
                             }}
                         >
                             {/* Top logo — horizontal */}
-                            <img
-                                src={LOGO_SRC}
-                                alt="Logo top"
-                                draggable={false}
+                            <img src={LOGO_SRC} alt="Logo top" draggable={false}
                                 style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', flexShrink: 0 }}
                             />
-                            {/* Middle logo — rotated 90° (left side of C) */}
-                            <div
-                                style={{
-                                    width: scaledH,
-                                    height: scaledW,
-                                    overflow: 'hidden',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    flexShrink: 0,
-                                }}
-                            >
-                                <img
-                                    src={LOGO_SRC}
-                                    alt="Logo left"
-                                    draggable={false}
+                            {/* Middle logo — same logo, rotated 90° to sit vertically on the left
+                                CSS transform rotates around center but doesn't affect layout.
+                                We correct the clipping by using position:absolute in a wrapper
+                                sized to the post-rotation visual footprint: scaledH wide × scaledW tall */}
+                            <div style={{
+                                position: 'relative',
+                                width: scaledH,
+                                height: scaledW,
+                                flexShrink: 0,
+                            }}>
+                                <img src={LOGO_SRC} alt="Logo left" draggable={false}
                                     style={{
+                                        position: 'absolute',
                                         width: scaledW,
                                         height: scaledH,
                                         objectFit: 'contain',
+                                        // Center the rotated img inside the wrapper
+                                        top: (scaledW - scaledH) / 2,
+                                        left: (scaledH - scaledW) / 2,
                                         transform: 'rotate(90deg)',
                                         transformOrigin: 'center center',
-                                        flexShrink: 0,
                                     }}
                                 />
                             </div>
                             {/* Bottom logo — horizontal */}
-                            <img
-                                src={LOGO_SRC}
-                                alt="Logo bottom"
-                                draggable={false}
+                            <img src={LOGO_SRC} alt="Logo bottom" draggable={false}
                                 style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', flexShrink: 0 }}
                             />
                             {/* Drag hint */}
@@ -295,9 +361,7 @@ export default function ReviewPage() {
                                 fontSize: 9, color: '#6366f1', whiteSpace: 'nowrap',
                                 background: 'rgba(255,255,255,0.9)', padding: '1px 5px',
                                 borderRadius: 3, border: '1px solid #c7d2fe', marginTop: 2,
-                            }}>
-                                ✥ drag to move
-                            </div>
+                            }}>✥ drag to move</div>
                         </div>
                     )}
                 </div>
@@ -373,8 +437,8 @@ export default function ReviewPage() {
                     <button onClick={handleSaveAnnotations} className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium border border-surface-300 rounded-lg hover:bg-surface-50 transition-colors">
                         <Save size={16} /> Save Annotations
                     </button>
-                    <button onClick={handleDownloadImage} className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium border border-surface-300 rounded-lg hover:bg-surface-50 transition-colors">
-                        <Download size={16} /> Export as Image
+                    <button onClick={handleSaveAsPdf} className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
+                        <FileDown size={16} /> Save as PDF
                     </button>
                 </div>
             </div>
