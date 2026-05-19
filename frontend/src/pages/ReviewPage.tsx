@@ -40,7 +40,7 @@ export default function ReviewPage() {
     const [sidebarEditComment, setSidebarEditComment] = useState('');
 
     // Logo overlay state (owned here so overlay renders inside canvas)
-    const [logoOverlay, setLogoOverlay] = useState<LogoOverlayState>({ active: false, pos: { x: 0, y: 0 }, scale: 1, opacity: 1, testResult: null, testComment: '' });
+    const [logoOverlay, setLogoOverlay] = useState<LogoOverlayState>({ activeTest: null, pos: { x: 0, y: 0 }, scale: 1, opacity: 1, windowRatio: '7:10', testResult: null, testComment: '' });
     // When true, logo is hidden so html2canvas excludes it from the PDF capture
     const [logoHiddenForCapture, setLogoHiddenForCapture] = useState(false);
     const logoDragging = useRef(false);
@@ -65,7 +65,7 @@ export default function ReviewPage() {
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        if (!review || commentModalOpen || logoOverlay.active) return;
+        if (!review || commentModalOpen || logoOverlay.activeTest !== null) return;
         setIsDrawing(true);
         const c = getRelativeCoords(e);
         setStartPoint({ x: c.pctX, y: c.pctY });
@@ -138,16 +138,22 @@ export default function ReviewPage() {
             const canvas = viewerRef.current;
             const canvasW = canvas.offsetWidth;
             const canvasH = canvas.offsetHeight;
-            // Logo group dimensions: width=scaledW, height=3*scaledH (3 stacked logos)
-            const lw = LOGO_BASE_W * logoOverlay.scale;
-            const lh = Math.round(lw / 3);
-            const groupH = lh * 3;
+            // dimensions
+            let groupW = LOGO_BASE_W * logoOverlay.scale;
+            let groupH = 0;
+            if (logoOverlay.activeTest === 'logo') {
+                const scaledH = Math.round(groupW / LOGO_ASPECT);
+                groupH = scaledH * 3; // Top logo + exactly 1 logo gap (left logo wrapper) + bottom logo
+            } else {
+                groupH = logoOverlay.windowRatio === '7:10' ? groupW * (10/7) : groupW * (7/10);
+            }
+            
             const newX = logoDragStart.current.ox + ev.clientX - logoDragStart.current.mx;
             const newY = logoDragStart.current.oy + ev.clientY - logoDragStart.current.my;
             setLogoOverlay(prev => ({
                 ...prev,
                 pos: {
-                    x: Math.max(0, Math.min(newX, canvasW - lw)),
+                    x: Math.max(0, Math.min(newX, canvasW - groupW)),
                     y: Math.max(0, Math.min(newY, canvasH - groupH)),
                 },
             }));
@@ -276,6 +282,9 @@ export default function ReviewPage() {
     // ── Logo sizing (SVG aspect 2.514:1) ─────────────────────────────────────
     const scaledW = LOGO_BASE_W * logoOverlay.scale;
     const scaledH = Math.round(scaledW / LOGO_ASPECT); // natural logo height
+    
+    // Window Motif Sizing
+    const motifH = logoOverlay.windowRatio === '7:10' ? scaledW * (10/7) : scaledW * (7/10);
 
     // ── Guards ────────────────────────────────────────────────────────────────
     if (loading) return <div className="flex items-center justify-center h-screen"><i className="pi pi-spin pi-spinner text-4xl text-brand-600" /></div>;
@@ -293,7 +302,7 @@ export default function ReviewPage() {
                 <div
                     ref={viewerRef}
                     className="relative inline-block bg-white shadow-card select-none"
-                    style={{ cursor: logoOverlay.active ? 'default' : 'crosshair', touchAction: 'none' }}
+                    style={{ cursor: logoOverlay.activeTest !== null ? 'default' : 'crosshair', touchAction: 'none' }}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
@@ -340,60 +349,93 @@ export default function ReviewPage() {
                         )}
                     </div>
 
-                    {/* ── C-Shaped Logo Overlay ──────────────────────────────── */}
-                    {logoOverlay.active && !logoHiddenForCapture && (() => {
-                        return (
-                            <div
-                                onMouseDown={handleLogoDragStart}
-                                style={{
-                                    position: 'absolute',
-                                    left: logoOverlay.pos.x,
-                                    top: logoOverlay.pos.y,
-                                    cursor: 'grab',
-                                    userSelect: 'none',
-                                    zIndex: 40,
-                                    width: scaledW,
-                                    pointerEvents: 'auto',
-                                    opacity: logoOverlay.opacity ?? 1,
-                                }}
-                            >
-                                {/* Top logo — horizontal */}
-                                <img src={LOGO_SRC} alt="Logo top" draggable={false}
-                                    style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }}
-                                />
-
-                                {/* Middle logo — same scaledW×scaledH img, rotated 90° CW.
-                                    marginLeft/Right: negative = collapse layout width to scaledH
-                                    marginTop/Bottom: positive = expand layout height to scaledW */}
-                                <img src={LOGO_SRC} alt="Logo left" draggable={false}
+                    {/* ── Overlays ──────────────────────────────── */}
+                    {logoOverlay.activeTest !== null && !logoHiddenForCapture && (() => {
+                        if (logoOverlay.activeTest === 'logo') {
+                            return (
+                                <div
+                                    onMouseDown={handleLogoDragStart}
                                     style={{
+                                        position: 'absolute',
+                                        left: logoOverlay.pos.x,
+                                        top: logoOverlay.pos.y,
+                                        cursor: 'grab',
+                                        userSelect: 'none',
+                                        zIndex: 40,
                                         width: scaledW,
-                                        height: scaledH,
-                                        objectFit: 'contain',
-                                        display: 'block',
-                                        flexShrink: 0,
-                                        transform: 'rotate(90deg)',
-                                        transformOrigin: 'center center',
-                                        marginLeft: -(scaledW - scaledH) / 2,
-                                        marginRight: -(scaledW - scaledH) / 2,
-                                        marginTop: (scaledW - scaledH) / 2,
-                                        marginBottom: (scaledW - scaledH) / 2,
+                                        pointerEvents: 'auto',
+                                        opacity: logoOverlay.opacity ?? 1,
                                     }}
-                                />
+                                >
+                                    {/* Top logo — horizontal */}
+                                    <img src={LOGO_SRC} alt="Logo top" draggable={false}
+                                        style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }}
+                                    />
 
-                                {/* Bottom logo — horizontal */}
-                                <img src={LOGO_SRC} alt="Logo bottom" draggable={false}
-                                    style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }}
-                                />
+                                    {/* Left logo — takes exactly one logo space vertically */}
+                                    <div style={{ width: scaledW, height: scaledH, position: 'relative' }}>
+                                        <img src={LOGO_SRC} alt="Logo left" draggable={false}
+                                            style={{
+                                                position: 'absolute',
+                                                width: scaledW,
+                                                height: scaledH,
+                                                objectFit: 'contain',
+                                                display: 'block',
+                                                transform: 'rotate(90deg)',
+                                                transformOrigin: 'center center',
+                                                left: -(scaledW - scaledH) / 2,
+                                                top: (scaledW / 2) - (1.5 * scaledH),
+                                            }}
+                                        />
+                                    </div>
 
-                                {/* Drag hint */}
-                                <div style={{
-                                    fontSize: 9, color: '#6366f1', whiteSpace: 'nowrap',
-                                    background: 'rgba(255,255,255,0.85)', padding: '1px 5px',
-                                    borderRadius: 3, border: '1px solid #c7d2fe', marginTop: 2,
-                                }}>✥ drag to move</div>
-                            </div>
-                        );
+                                    {/* Bottom logo — horizontal */}
+                                    <img src={LOGO_SRC} alt="Logo bottom" draggable={false}
+                                        style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }}
+                                    />
+
+                                    {/* Drag hint */}
+                                    <div style={{
+                                        fontSize: 9, color: '#6366f1', whiteSpace: 'nowrap',
+                                        background: 'rgba(255,255,255,0.85)', padding: '1px 5px',
+                                        borderRadius: 3, border: '1px solid #c7d2fe', marginTop: 2,
+                                    }}>✥ drag to move</div>
+                                </div>
+                            );
+                        } else if (logoOverlay.activeTest === 'window_motif') {
+                            return (
+                                <div
+                                    onMouseDown={handleLogoDragStart}
+                                    style={{
+                                        position: 'absolute',
+                                        left: logoOverlay.pos.x,
+                                        top: logoOverlay.pos.y,
+                                        cursor: 'grab',
+                                        userSelect: 'none',
+                                        zIndex: 40,
+                                        width: scaledW,
+                                        height: motifH,
+                                        pointerEvents: 'auto',
+                                        opacity: logoOverlay.opacity ?? 1,
+                                        border: '2px solid #6366f1',
+                                        backgroundColor: 'rgba(99, 102, 241, 0.2)', // Semi-transparent brand color
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                    }}
+                                >
+                                    <div style={{
+                                        position: 'absolute',
+                                        bottom: -20,
+                                        left: 0,
+                                        fontSize: 9, color: '#6366f1', whiteSpace: 'nowrap',
+                                        background: 'rgba(255,255,255,0.85)', padding: '1px 5px',
+                                        borderRadius: 3, border: '1px solid #c7d2fe'
+                                    }}>✥ drag to move</div>
+                                </div>
+                            );
+                        }
+                        return null;
                     })()}
                 </div>
             </div>
@@ -419,7 +461,7 @@ export default function ReviewPage() {
                     </div>
                     <div className="text-xs text-surface-400 flex items-start gap-1.5 bg-surface-50 p-2 rounded mt-2">
                         <Info size={12} className="mt-0.5 flex-shrink-0" />
-                        {logoOverlay.active ? 'Disable logo test to draw annotations.' : 'Click and drag on the image to annotate.'}
+                        {logoOverlay.activeTest !== null ? 'Disable test overlay to draw annotations.' : 'Click and drag on the image to annotate.'}
                     </div>
                 </div>
 

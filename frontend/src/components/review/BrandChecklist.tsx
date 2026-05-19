@@ -22,11 +22,16 @@ const NOT_OK_COMMENT =
     'Logo placement does not meet brand guidelines. Top-left logo clearance is insufficient. ' +
     'Please ensure the logo is placed within the safe zone with adequate clear space on all sides.';
 
+const NOT_OK_MOTIF_COMMENT =
+    'Window motif placement or ratio does not meet brand guidelines. ' +
+    'Please ensure it covers the required safe zone and follows the correct aspect ratio.';
+
 export interface LogoOverlayState {
-    active: boolean;
+    activeTest: 'logo' | 'window_motif' | null;
     pos: { x: number; y: number };
     scale: number;
     opacity: number;
+    windowRatio: '7:10' | '10:7';
     testResult: 'ok' | 'not_ok' | null;
     testComment: string;
 }
@@ -39,13 +44,13 @@ interface Props {
 export default function BrandChecklist({ overlayState, onOverlayChange }: Props) {
     const [platform, setPlatform] = useState<Platform | ''>('');
     const [style, setStyle] = useState<StyleOption | null>(null);
-    const [logoTestResult, setLogoTestResult] = useState<LogoTestResult>(null);
-    const [logoComment, setLogoComment] = useState('');
+    const [testResult, setTestResult] = useState<LogoTestResult>(null);
+    const [testComment, setTestComment] = useState('');
 
     const resetTest = () => {
-        setLogoTestResult(null);
-        setLogoComment('');
-        onOverlayChange({ ...overlayState, active: false, testResult: null, testComment: '' });
+        setTestResult(null);
+        setTestComment('');
+        onOverlayChange({ ...overlayState, activeTest: null, testResult: null, testComment: '' });
     };
 
     const handlePlatformChange = (val: Platform | '') => {
@@ -59,16 +64,24 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
         resetTest();
     };
 
-    const handleStartTest = () => {
-        setLogoTestResult(null);
-        setLogoComment('');
-        onOverlayChange({ active: true, pos: { x: 0, y: 0 }, scale: 1, opacity: 1, testResult: null, testComment: '' });
+    const handleStartTest = (testType: 'logo' | 'window_motif') => {
+        setTestResult(null);
+        setTestComment('');
+        onOverlayChange({ 
+            activeTest: testType, 
+            pos: { x: 0, y: 0 }, 
+            scale: 1, 
+            opacity: 1, 
+            windowRatio: '7:10',
+            testResult: null, 
+            testComment: '' 
+        });
     };
 
-    const handleLogoResultChange = (val: LogoTestResult) => {
-        setLogoTestResult(val);
-        const comment = val === 'not_ok' ? NOT_OK_COMMENT : '';
-        setLogoComment(comment);
+    const handleResultChange = (val: LogoTestResult, testType: 'logo' | 'window_motif') => {
+        setTestResult(val);
+        const comment = val === 'not_ok' ? (testType === 'logo' ? NOT_OK_COMMENT : NOT_OK_MOTIF_COMMENT) : '';
+        setTestComment(comment);
         onOverlayChange({ ...overlayState, testResult: val, testComment: comment });
     };
 
@@ -133,17 +146,17 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
                                         <p className="text-[10px] text-surface-400">Test logo clearance &amp; placement</p>
                                     </div>
                                     <button
-                                        onClick={handleStartTest}
-                                        className="px-3 py-1.5 text-[11px] font-semibold bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors flex-shrink-0"
+                                        onClick={() => handleStartTest('logo')}
+                                        className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors flex-shrink-0 ${overlayState.activeTest === 'logo' ? 'bg-brand-700 text-white shadow-inner' : 'bg-brand-600 text-white hover:bg-brand-700'}`}
                                     >
-                                        Test
+                                        {overlayState.activeTest === 'logo' ? 'Testing...' : 'Test'}
                                     </button>
                                 </div>
 
-                                {overlayState.active && (
+                                {overlayState.activeTest === 'logo' && (
                                     <>
                                         {/* Scale slider */}
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 mt-2">
                                             <span className="text-[10px] text-surface-500 w-10">Scale</span>
                                             <input
                                                 type="range" min={0.5} max={2.5} step={0.05}
@@ -169,8 +182,8 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
                                         {/* Result dropdown */}
                                         <div className="relative">
                                             <select
-                                                value={logoTestResult ?? ''}
-                                                onChange={e => handleLogoResultChange((e.target.value || null) as LogoTestResult)}
+                                                value={testResult ?? ''}
+                                                onChange={e => handleResultChange((e.target.value || null) as LogoTestResult, 'logo')}
                                                 className="w-full appearance-none p-2 pr-7 border border-surface-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-brand-500 outline-none"
                                             >
                                                 <option value="">-- Logo placement result --</option>
@@ -180,13 +193,13 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
                                             <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
                                         </div>
 
-                                        {logoTestResult === 'not_ok' && (
+                                        {testResult === 'not_ok' && (
                                             <div className="space-y-1">
                                                 <p className="text-[10px] text-red-500 font-medium">Issue flagged — edit comment if needed:</p>
                                                 <textarea
-                                                    value={logoComment}
+                                                    value={testComment}
                                                     onChange={e => {
-                                                        setLogoComment(e.target.value);
+                                                        setTestComment(e.target.value);
                                                         onOverlayChange({ ...overlayState, testResult: 'not_ok', testComment: e.target.value });
                                                     }}
                                                     className="w-full p-2 border border-red-300 rounded-lg text-[11px] resize-none focus:ring-2 focus:ring-red-400 outline-none leading-relaxed bg-red-50/40"
@@ -194,8 +207,103 @@ export default function BrandChecklist({ overlayState, onOverlayChange }: Props)
                                                 />
                                             </div>
                                         )}
-                                        {logoTestResult === 'ok' && (
+                                        {testResult === 'ok' && (
                                             <p className="text-[11px] text-green-600 font-medium">✅ Logo placement looks good.</p>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Window Motif */}
+                            <div className="space-y-2 pt-2 border-t border-surface-100">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-xs font-semibold text-surface-700">Window Motif</p>
+                                        <p className="text-[10px] text-surface-400">Test window motif coverage</p>
+                                    </div>
+                                    <button
+                                        onClick={() => handleStartTest('window_motif')}
+                                        className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors flex-shrink-0 ${overlayState.activeTest === 'window_motif' ? 'bg-brand-700 text-white shadow-inner' : 'bg-brand-600 text-white hover:bg-brand-700'}`}
+                                    >
+                                        {overlayState.activeTest === 'window_motif' ? 'Testing...' : 'Test'}
+                                    </button>
+                                </div>
+
+                                {overlayState.activeTest === 'window_motif' && (
+                                    <>
+                                        {/* Scale slider */}
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <span className="text-[10px] text-surface-500 w-10">Scale</span>
+                                            <input
+                                                type="range" min={0.5} max={5} step={0.1}
+                                                value={overlayState.scale}
+                                                onChange={e => onOverlayChange({ ...overlayState, scale: parseFloat(e.target.value) })}
+                                                className="flex-1 h-1.5 accent-brand-600"
+                                            />
+                                            <span className="text-[10px] text-surface-500 w-8 text-right">{overlayState.scale.toFixed(1)}x</span>
+                                        </div>
+
+                                        {/* Opacity slider */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-surface-500 w-10">Opacity</span>
+                                            <input
+                                                type="range" min={0.1} max={1} step={0.05}
+                                                value={overlayState.opacity ?? 1}
+                                                onChange={e => onOverlayChange({ ...overlayState, opacity: parseFloat(e.target.value) })}
+                                                className="flex-1 h-1.5 accent-brand-600"
+                                            />
+                                            <span className="text-[10px] text-surface-500 w-8 text-right">{Math.round((overlayState.opacity ?? 1) * 100)}%</span>
+                                        </div>
+
+                                        {/* Ratio Toggle */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-surface-500 w-10">Ratio</span>
+                                            <div className="flex-1 flex bg-surface-100 p-0.5 rounded-md">
+                                                <button
+                                                    onClick={() => onOverlayChange({ ...overlayState, windowRatio: '7:10' })}
+                                                    className={`flex-1 text-[10px] py-1 rounded-sm text-center font-medium transition-colors ${overlayState.windowRatio === '7:10' ? 'bg-white text-brand-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'}`}
+                                                >
+                                                    7:10
+                                                </button>
+                                                <button
+                                                    onClick={() => onOverlayChange({ ...overlayState, windowRatio: '10:7' })}
+                                                    className={`flex-1 text-[10px] py-1 rounded-sm text-center font-medium transition-colors ${overlayState.windowRatio === '10:7' ? 'bg-white text-brand-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'}`}
+                                                >
+                                                    10:7
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Result dropdown */}
+                                        <div className="relative mt-2">
+                                            <select
+                                                value={testResult ?? ''}
+                                                onChange={e => handleResultChange((e.target.value || null) as LogoTestResult, 'window_motif')}
+                                                className="w-full appearance-none p-2 pr-7 border border-surface-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                                            >
+                                                <option value="">-- Motif placement result --</option>
+                                                <option value="ok">✅  Ok — placement is correct</option>
+                                                <option value="not_ok">❌  Not Ok — needs adjustment</option>
+                                            </select>
+                                            <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
+                                        </div>
+
+                                        {testResult === 'not_ok' && (
+                                            <div className="space-y-1">
+                                                <p className="text-[10px] text-red-500 font-medium">Issue flagged — edit comment if needed:</p>
+                                                <textarea
+                                                    value={testComment}
+                                                    onChange={e => {
+                                                        setTestComment(e.target.value);
+                                                        onOverlayChange({ ...overlayState, testResult: 'not_ok', testComment: e.target.value });
+                                                    }}
+                                                    className="w-full p-2 border border-red-300 rounded-lg text-[11px] resize-none focus:ring-2 focus:ring-red-400 outline-none leading-relaxed bg-red-50/40"
+                                                    rows={4}
+                                                />
+                                            </div>
+                                        )}
+                                        {testResult === 'ok' && (
+                                            <p className="text-[11px] text-green-600 font-medium">✅ Motif placement looks good.</p>
                                         )}
                                     </>
                                 )}
