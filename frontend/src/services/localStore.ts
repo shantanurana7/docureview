@@ -103,7 +103,7 @@ export function downloadJson() {
     // Include date and time in filename
     const now = new Date();
     const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    link.download = `docureview_data_${dateStr}.json`;
+    link.download = `brandreview_data_${dateStr}.json`;
     link.click();
     URL.revokeObjectURL(link.href);
 }
@@ -117,7 +117,7 @@ export function saveToLocalStorage() {
         }),
     };
     try {
-        localStorage.setItem('docureview_data', JSON.stringify(cleaned));
+        localStorage.setItem('brandreview_data', JSON.stringify(cleaned));
     } catch (e) {
         // localStorage may exceed quota with large base64 data
         console.warn('Could not save to localStorage (data may be too large):', e);
@@ -126,7 +126,10 @@ export function saveToLocalStorage() {
 
 // === Load from localStorage on startup ===
 export function loadFromLocalStorage() {
-    const saved = localStorage.getItem('docureview_data');
+    // Remove old docureview_data key if present (cleanup old temp data)
+    localStorage.removeItem('docureview_data');
+
+    const saved = localStorage.getItem('brandreview_data');
     if (saved) {
         try {
             const parsed: DocuReviewData = JSON.parse(saved);

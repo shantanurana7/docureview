@@ -6,9 +6,9 @@ import { Review, Annotation, ShapeType } from '../types';
 import { ArrowLeft, Square, Save, FileDown, Trash2, Pencil, Check, X, Info } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { PDFDocument, PDFName, PDFString, rgb } from 'pdf-lib';
-import BrandChecklist, { LogoOverlayState } from '../components/review/BrandChecklist';
+import BrandChecklist, { LogoOverlayState, CommittedTestResult } from '../components/review/BrandChecklist';
 
-const HIGHLIGHT_COLOR = '#6366f1';
+const HIGHLIGHT_COLOR = '#1e49e2';
 const LOGO_SRC = '/KPMG_blue_logo.svg';
 // SVG viewBox: 80.58 × 32.08 → aspect ratio ≈ 2.514 : 1
 const LOGO_ASPECT = 80.58 / 32.08; // ≈ 2.514
@@ -41,6 +41,12 @@ export default function ReviewPage() {
 
     // Logo overlay state (owned here so overlay renders inside canvas)
     const [logoOverlay, setLogoOverlay] = useState<LogoOverlayState>({ activeTest: null, pos: { x: 0, y: 0 }, scale: 1, opacity: 1, windowRatio: '7:10', testResult: null, testComment: '' });
+    // Separately committed test results — only populated after the user clicks "Save Result"
+    const [savedLogoResult, setSavedLogoResult] = useState<CommittedTestResult | null>(null);
+    const [savedMotifResult, setSavedMotifResult] = useState<CommittedTestResult | null>(null);
+    const [savedSizeResult, setSavedSizeResult] = useState<CommittedTestResult | null>(null);
+    // Natural pixel dimensions of the uploaded image (set on img onLoad)
+    const [imageDimensions, setImageDimensions] = useState<{ w: number; h: number } | null>(null);
     // When true, logo is hidden so html2canvas excludes it from the PDF capture
     const [logoHiddenForCapture, setLogoHiddenForCapture] = useState(false);
     const logoDragging = useRef(false);
@@ -245,21 +251,54 @@ export default function ReviewPage() {
                 page.node.addAnnot(annotRef);
             });
 
-            // Logo test comment — if flagged as not ok, add a separate sticky note
-            if (logoOverlay.testResult === 'not_ok' && logoOverlay.testComment) {
+            // ── Logo test committed result ──────────────────────────────
+            if (savedLogoResult && savedLogoResult.result === 'not_ok' && savedLogoResult.comment) {
                 const ltRef = pdfDoc.context.register(
                     pdfDoc.context.obj({
                         Type: 'Annot',
                         Subtype: 'Text',
                         Name: PDFName.of('Note'),
-                        Rect: [20, canvasH - 80, 200, canvasH - 20],
-                        Contents: PDFString.of(`LOGO PLACEMENT — NOT OK:\n${logoOverlay.testComment}`),
+                        Rect: [20, canvasH - 90, 240, canvasH - 20],
+                        Contents: PDFString.of(`LOGO PLACEMENT — NOT OK:\n${savedLogoResult.comment}`),
                         T: PDFString.of('Brand Reviewer'),
                         Open: false,
                         C: [0.9, 0.2, 0.2],
                     })
                 );
                 page.node.addAnnot(ltRef);
+            }
+
+            // ── Motif test committed result ─────────────────────────────
+            if (savedMotifResult && savedMotifResult.result === 'not_ok' && savedMotifResult.comment) {
+                const mtRef = pdfDoc.context.register(
+                    pdfDoc.context.obj({
+                        Type: 'Annot',
+                        Subtype: 'Text',
+                        Name: PDFName.of('Note'),
+                        Rect: [20, canvasH - 170, 240, canvasH - 100],
+                        Contents: PDFString.of(`WINDOW MOTIF — NOT OK:\n${savedMotifResult.comment}`),
+                        T: PDFString.of('Brand Reviewer'),
+                        Open: false,
+                        C: [0.9, 0.2, 0.2],
+                    })
+                );
+                page.node.addAnnot(mtRef);
+            }
+            // ── Size test committed result ─────────────────────────────
+            if (savedSizeResult && savedSizeResult.result === 'not_ok' && savedSizeResult.comment) {
+                const szRef = pdfDoc.context.register(
+                    pdfDoc.context.obj({
+                        Type: 'Annot',
+                        Subtype: 'Text',
+                        Name: PDFName.of('Note'),
+                        Rect: [20, canvasH - 250, 240, canvasH - 180],
+                        Contents: PDFString.of(`IMAGE SIZE — NOT OK:\n${savedSizeResult.comment}`),
+                        T: PDFString.of('Brand Reviewer'),
+                        Open: false,
+                        C: [0.9, 0.2, 0.2],
+                    })
+                );
+                page.node.addAnnot(szRef);
             }
 
             // ── Step 4: Save ───────────────────────────────────────────────
@@ -309,7 +348,15 @@ export default function ReviewPage() {
                     onMouseLeave={() => isDrawing && setIsDrawing(false)}
                 >
                     {review.fileBlobUrl
-                        ? <img src={review.fileBlobUrl} alt="Review" className="max-w-full h-auto select-none pointer-events-none" />
+                        ? <img
+                            src={review.fileBlobUrl}
+                            alt="Review"
+                            className="max-w-full h-auto select-none pointer-events-none"
+                            onLoad={(e) => {
+                                const img = e.currentTarget as HTMLImageElement;
+                                setImageDimensions({ w: img.naturalWidth, h: img.naturalHeight });
+                            }}
+                          />
                         : <div className="p-8 text-danger">File not available</div>
                     }
 
@@ -396,9 +443,9 @@ export default function ReviewPage() {
 
                                     {/* Drag hint */}
                                     <div style={{
-                                        fontSize: 9, color: '#6366f1', whiteSpace: 'nowrap',
+                                        fontSize: 9, color: '#1e49e2', whiteSpace: 'nowrap',
                                         background: 'rgba(255,255,255,0.85)', padding: '1px 5px',
-                                        borderRadius: 3, border: '1px solid #c7d2fe', marginTop: 2,
+                                        borderRadius: 3, border: '1px solid #99acd4', marginTop: 2,
                                     }}>✥ drag to move</div>
                                 </div>
                             );
@@ -417,8 +464,8 @@ export default function ReviewPage() {
                                         height: motifH,
                                         pointerEvents: 'auto',
                                         opacity: logoOverlay.opacity ?? 1,
-                                        border: '2px solid #6366f1',
-                                        backgroundColor: 'rgba(99, 102, 241, 0.2)', // Semi-transparent brand color
+                                        border: '2px solid #1e49e2',
+                                        backgroundColor: 'rgba(30, 73, 226, 0.15)', // Semi-transparent brand color
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
@@ -428,9 +475,9 @@ export default function ReviewPage() {
                                         position: 'absolute',
                                         bottom: -20,
                                         left: 0,
-                                        fontSize: 9, color: '#6366f1', whiteSpace: 'nowrap',
+                                        fontSize: 9, color: '#1e49e2', whiteSpace: 'nowrap',
                                         background: 'rgba(255,255,255,0.85)', padding: '1px 5px',
-                                        borderRadius: 3, border: '1px solid #c7d2fe'
+                                        borderRadius: 3, border: '1px solid #99acd4'
                                     }}>✥ drag to move</div>
                                 </div>
                             );
@@ -503,7 +550,14 @@ export default function ReviewPage() {
                 </div>
 
                 {/* Brand Checklist */}
-                <BrandChecklist overlayState={logoOverlay} onOverlayChange={setLogoOverlay} />
+                <BrandChecklist
+                    overlayState={logoOverlay}
+                    onOverlayChange={setLogoOverlay}
+                    onSaveLogoResult={setSavedLogoResult}
+                    onSaveMotifResult={setSavedMotifResult}
+                    onSaveSizeResult={setSavedSizeResult}
+                    imageDimensions={imageDimensions}
+                />
 
                 {/* Actions */}
                 <div className="p-4 border-t border-surface-200 space-y-2 flex-shrink-0 mt-auto">
@@ -520,22 +574,40 @@ export default function ReviewPage() {
             {commentModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ pointerEvents: 'none' }}>
                     <div className="absolute inset-0 bg-black/20" style={{ pointerEvents: 'auto' }} onClick={closeCommentModal} />
-                    <div className="relative bg-white rounded-xl shadow-2xl border border-surface-200 p-5 w-[340px] animate-fade-in" style={{ pointerEvents: 'auto' }}>
-                        <h3 className="text-sm font-semibold text-surface-700 mb-3">{editingId ? 'Edit Comment' : 'Add Comment'}</h3>
-                        <textarea
-                            value={comment}
-                            onChange={e => setComment(e.target.value)}
-                            className="w-full h-24 p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none resize-none"
-                            placeholder="Describe the issue..."
-                            autoFocus
-                            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCommentSave(); }}
-                        />
-                        <p className="text-[10px] text-surface-400 mt-1 mb-3">Ctrl+Enter to save</p>
-                        <div className="flex justify-end gap-2">
-                            <button onClick={closeCommentModal} className="px-3 py-1.5 text-xs font-medium text-surface-600 hover:bg-surface-100 rounded-lg">Cancel</button>
-                            <button onClick={handleCommentSave} disabled={!comment.trim()} className="px-3 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg disabled:opacity-50">
-                                {editingId ? 'Update' : 'Save'}
+                    <div className="relative bg-white rounded-xl shadow-2xl border border-surface-200 p-5 w-[360px] animate-fade-in" style={{ pointerEvents: 'auto' }}>
+                        {/* Modal header */}
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ backgroundColor: '#1e49e2' }}>
+                                {editingId ? '✎' : '+'}
+                            </div>
+                            <h3 className="text-sm font-semibold text-surface-700">{editingId ? 'Edit Comment' : 'Add Comment'}</h3>
+                        </div>
+
+                        {/* Textarea */}
+                        <div className="relative">
+                            <textarea
+                                value={comment}
+                                onChange={e => setComment(e.target.value)}
+                                className="w-full h-28 p-2.5 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none resize-none pr-[72px]"
+                                placeholder="Describe the issue…"
+                                autoFocus
+                                onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCommentSave(); }}
+                            />
+                            {/* Inline Save button inside textarea */}
+                            <button
+                                onClick={handleCommentSave}
+                                disabled={!comment.trim()}
+                                className="absolute bottom-2 right-2 flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-white rounded-md transition-colors disabled:opacity-40"
+                                style={{ backgroundColor: comment.trim() ? '#1e49e2' : undefined }}
+                                title="Save comment (Ctrl+Enter)"
+                            >
+                                <Save size={11} /> {editingId ? 'Update' : 'Save'}
                             </button>
+                        </div>
+
+                        <div className="flex items-center justify-between mt-2">
+                            <p className="text-[10px] text-surface-400">Ctrl+Enter to save quickly</p>
+                            <button onClick={closeCommentModal} className="text-xs text-surface-500 hover:text-surface-700 font-medium">Cancel</button>
                         </div>
                     </div>
                 </div>

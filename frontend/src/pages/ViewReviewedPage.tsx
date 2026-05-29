@@ -6,7 +6,7 @@ import { Review, Annotation } from '../types';
 import { ArrowLeft, Download, Mail } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
-const HIGHLIGHT_COLOR = '#6366f1';
+const HIGHLIGHT_COLOR = '#1e49e2';
 
 export default function ViewReviewedPage() {
     const { reviewId } = useParams<{ reviewId: string }>();

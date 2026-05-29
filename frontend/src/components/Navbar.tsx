@@ -74,26 +74,26 @@ export default function Navbar() {
 
     return (
         <>
-            <nav className="bg-white border-b border-surface-200 px-6 py-3 flex items-center justify-between sticky top-0 z-40 shadow-sm">
+            <nav className="bg-[#00338d] border-b border-[#002776] px-6 py-3 flex items-center justify-between sticky top-0 z-40 shadow-lg">
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-                        <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
-                            <span className="text-white font-bold text-sm">DR</span>
+                        <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center border border-white/20">
+                            <span className="text-white font-bold text-sm">BR</span>
                         </div>
-                        <span className="text-lg font-bold text-surface-800">DocuReview</span>
+                        <span className="text-lg font-bold text-white">Brand Review</span>
                     </div>
 
                     {/* Navigation Links */}
                     <div className="flex items-center gap-1 ml-4">
                         <button
                             onClick={() => navigate('/')}
-                            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${isActive('/') ? 'bg-brand-50 text-brand-700' : 'text-surface-600 hover:text-surface-800 hover:bg-surface-100'}`}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${isActive('/') ? 'bg-white/20 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
                         >
                             Dashboard
                         </button>
                         <button
                             onClick={() => navigate('/upload')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${isActive('/upload') ? 'bg-brand-50 text-brand-700' : 'text-surface-600 hover:text-surface-800 hover:bg-surface-100'}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${isActive('/upload') ? 'bg-white/20 text-white' : 'text-white/70 hover:text-white hover:bg-white/10'}`}
                         >
                             <Plus size={14} /> New Review
                         </button>
@@ -112,16 +112,16 @@ export default function Navbar() {
                     />
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-surface-600 border border-surface-300 rounded-lg hover:bg-surface-50 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white/80 border border-white/25 rounded-lg hover:bg-white/10 hover:text-white transition-colors"
                         title="Load a previously saved JSON data file"
                     >
-                        <FolderOpen size={15} /> Load JSON
+                        <FolderOpen size={15} /> Load
                     </button>
 
                     {/* Save JSON (to localStorage) */}
                     <button
                         onClick={handleSaveJson}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-surface-600 border border-surface-300 rounded-lg hover:bg-surface-50 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white/80 border border-white/25 rounded-lg hover:bg-white/10 hover:text-white transition-colors"
                         title="Save current data to browser session"
                     >
                         <Save size={15} /> Save
@@ -130,7 +130,7 @@ export default function Navbar() {
                     {/* Download JSON */}
                     <button
                         onClick={handleDownloadJson}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-[#1e49e2] rounded-lg hover:bg-[#1a3fc5] transition-colors shadow-sm"
                         title="Download data as JSON file to your computer"
                     >
                         <Download size={15} /> Download JSON

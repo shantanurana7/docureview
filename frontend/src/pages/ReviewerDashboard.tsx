@@ -62,8 +62,8 @@ export default function ReviewerDashboard() {
         datasets: [{
             label: 'Composite Score',
             data: scoredReviews.map(r => r.score?.composite_score || 0).slice(-10),
-            backgroundColor: '#818cf8',
-            borderColor: '#4f46e5',
+            backgroundColor: '#6d8bc2',
+            borderColor: '#00338d',
             borderWidth: 2,
             borderRadius: 6,
             barThickness: 24,
