@@ -16,7 +16,8 @@ export interface Review {
     // Runtime-only: the file blob (not saved to JSON)
     fileBlob?: Blob;
     fileBlobUrl?: string;
-    fileType?: 'image';
+    fileType?: 'image' | 'pdf';
+    totalPages?: number;
     original_filename?: string;
 }
 

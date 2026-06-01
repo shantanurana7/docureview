@@ -55,6 +55,11 @@ interface Props {
     onSaveSizeResult:  (r: CommittedTestResult | null) => void;
     /** Natural pixel dimensions of the uploaded image */
     imageDimensions: { w: number; h: number } | null;
+    /** Currently active logo source (blue or white) */
+    logoSrc: string;
+    onLogoSrcChange: (src: string) => void;
+    /** When true (PDF upload), hides all brand checklist sections */
+    isPdf?: boolean;
 }
 
 // ── Reusable "Saved to PDF" badge ─────────────────────────────────────────────
@@ -70,6 +75,8 @@ export default function BrandChecklist({
     overlayState, onOverlayChange,
     onSaveLogoResult, onSaveMotifResult, onSaveSizeResult,
     imageDimensions,
+    logoSrc, onLogoSrcChange,
+    isPdf = false,
 }: Props) {
     const [platform, setPlatform] = useState<Platform | ''>('');
     const [style,    setStyle]    = useState<StyleOption | null>(null);
@@ -124,8 +131,8 @@ export default function BrandChecklist({
     const [motifComment, setMotifComment] = useState('');
     const [motifSaved,   setMotifSaved]   = useState(false);
 
-    // ── Reset helpers ─────────────────────────────────────────────────────────
-    const resetAll = () => {
+    // ── Reset brand tests only — custom annotations are untouched ─────────────
+    const resetBrandTests = () => {
         setLogoResult(null);  setLogoComment('');  setLogoSaved(false);  onSaveLogoResult(null);
         setMotifResult(null); setMotifComment(''); setMotifSaved(false); onSaveMotifResult(null);
         setSizeSaved(false); onSaveSizeResult(null);
@@ -135,7 +142,7 @@ export default function BrandChecklist({
     const handlePlatformChange = (val: Platform | '') => {
         setPlatform(val);
         setStyle(null);
-        resetAll();
+        resetBrandTests(); // ← only resets tests, annotations are preserved
     };
 
     const handleStyleChange = (val: StyleOption) => {
@@ -185,11 +192,15 @@ export default function BrandChecklist({
         if (!logoResult) return;
         setLogoSaved(true);
         onSaveLogoResult({ result: logoResult, comment: logoComment });
+        // Hide the overlay once result is saved
+        onOverlayChange({ ...overlayState, activeTest: null });
     };
     const handleSaveMotif = () => {
         if (!motifResult) return;
         setMotifSaved(true);
         onSaveMotifResult({ result: motifResult, comment: motifComment });
+        // Hide the overlay once result is saved
+        onOverlayChange({ ...overlayState, activeTest: null });
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -199,6 +210,17 @@ export default function BrandChecklist({
                 <h3 className="text-xs font-semibold text-surface-600 uppercase tracking-wide">Brand Checklist</h3>
             </div>
 
+            {isPdf ? (
+                <div className="p-4">
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <span className="text-amber-500 text-sm flex-shrink-0 mt-0.5">ℹ️</span>
+                        <p className="text-xs text-amber-800 leading-relaxed">
+                            Brand checklist tests are not available for PDF uploads.
+                            Use the annotation tool above to add comments per page.
+                        </p>
+                    </div>
+                </div>
+            ) : (
             <div className="p-4 space-y-4">
                 {/* ── Platform Dropdown ──────────────────────────────────── */}
                 <div>
@@ -274,9 +296,14 @@ export default function BrandChecklist({
                                             </p>
                                             <button
                                                 onClick={handleSaveSize}
-                                                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors"
+                                                disabled={sizeSaved}
+                                                className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
+                                                    sizeSaved
+                                                        ? 'bg-green-600 text-white cursor-default'
+                                                        : 'text-white bg-brand-600 hover:bg-brand-700'
+                                                }`}
                                             >
-                                                <Save size={11} /> Save Size Test Result
+                                                {sizeSaved ? <><CheckCircle size={11} /> Saved</> : <><Save size={11} /> Save Size Test Result</>}
                                             </button>
                                         </div>
                                     )}
@@ -291,14 +318,20 @@ export default function BrandChecklist({
                                             <textarea
                                                 value={sizeComment}
                                                 onChange={e => { setSizeComment(e.target.value); setSizeSaved(false); }}
-                                                className="w-full p-2 border border-red-300 rounded-lg text-[11px] resize-none focus:ring-2 focus:ring-red-400 outline-none leading-relaxed bg-white"
+                                                disabled={sizeSaved}
+                                                className="w-full p-2 border border-red-300 rounded-lg text-[11px] resize-none focus:ring-2 focus:ring-red-400 outline-none leading-relaxed bg-white disabled:opacity-60"
                                                 rows={4}
                                             />
                                             <button
                                                 onClick={handleSaveSize}
-                                                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors"
+                                                disabled={sizeSaved}
+                                                className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
+                                                    sizeSaved
+                                                        ? 'bg-green-600 text-white cursor-default'
+                                                        : 'text-white bg-brand-600 hover:bg-brand-700'
+                                                }`}
                                             >
-                                                <Save size={11} /> Save Size Test Result
+                                                {sizeSaved ? <><CheckCircle size={11} /> Saved</> : <><Save size={11} /> Save Size Test Result</>}
                                             </button>
                                         </div>
                                     )}
@@ -351,13 +384,32 @@ export default function BrandChecklist({
                                         <button
                                             onClick={() => handleStartTest('logo')}
                                             className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
-                                                overlayState.activeTest === 'logo'
+                                                !logoSaved && overlayState.activeTest === 'logo'
                                                     ? 'bg-brand-700 text-white shadow-inner'
                                                     : 'bg-brand-600 text-white hover:bg-brand-700'
                                             }`}
                                         >
-                                            {overlayState.activeTest === 'logo' ? 'Testing…' : logoSaved ? 'Re-test' : 'Test'}
+                                            {logoSaved ? 'Re-test' : overlayState.activeTest === 'logo' ? 'Testing…' : 'Test'}
                                         </button>
+                                    </div>
+                                </div>
+
+                                {/* White / Blue logo toggle */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-surface-500 font-medium">Logo colour:</span>
+                                    <div className="flex bg-surface-100 p-0.5 rounded-md">
+                                        <button
+                                            onClick={() => onLogoSrcChange('/KPMG_blue_logo.svg')}
+                                            className={`px-2 py-0.5 text-[10px] rounded-sm font-medium transition-colors ${
+                                                logoSrc === '/KPMG_blue_logo.svg' ? 'bg-white text-brand-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'
+                                            }`}
+                                        >Blue</button>
+                                        <button
+                                            onClick={() => onLogoSrcChange('/KPMG_white_logo.svg')}
+                                            className={`px-2 py-0.5 text-[10px] rounded-sm font-medium transition-colors ${
+                                                logoSrc === '/KPMG_white_logo.svg' ? 'bg-surface-800 text-white shadow-sm' : 'text-surface-500 hover:text-surface-700'
+                                            }`}
+                                        >White</button>
                                     </div>
                                 </div>
 
@@ -399,19 +451,32 @@ export default function BrandChecklist({
                                                 <textarea
                                                     value={logoComment}
                                                     onChange={e => { setLogoComment(e.target.value); setLogoSaved(false); onOverlayChange({ ...overlayState, testResult: 'not_ok', testComment: e.target.value }); }}
-                                                    className="w-full p-2 border border-red-300 rounded-lg text-[11px] resize-none focus:ring-2 focus:ring-red-400 outline-none leading-relaxed bg-red-50/40"
+                                                    disabled={logoSaved}
+                                                    className="w-full p-2 border border-red-300 rounded-lg text-[11px] resize-none focus:ring-2 focus:ring-red-400 outline-none leading-relaxed bg-red-50/40 disabled:opacity-60"
                                                     rows={4}
                                                 />
-                                                <button onClick={handleSaveLogo} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors">
-                                                    <Save size={11} /> Save Logo Test Result
+                                                <button
+                                                    onClick={handleSaveLogo}
+                                                    disabled={logoSaved}
+                                                    className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
+                                                        logoSaved ? 'bg-green-600 text-white cursor-default' : 'text-white bg-brand-600 hover:bg-brand-700'
+                                                    }`}
+                                                >
+                                                    {logoSaved ? <><CheckCircle size={11} /> Saved</> : <><Save size={11} /> Save Logo Test Result</>}
                                                 </button>
                                             </div>
                                         )}
                                         {logoResult === 'ok' && (
                                             <div className="space-y-1.5">
                                                 <p className="text-[11px] text-green-600 font-medium">✅ Logo placement looks good.</p>
-                                                <button onClick={handleSaveLogo} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors">
-                                                    <Save size={11} /> Save Logo Test Result
+                                                <button
+                                                    onClick={handleSaveLogo}
+                                                    disabled={logoSaved}
+                                                    className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
+                                                        logoSaved ? 'bg-green-600 text-white cursor-default' : 'text-white bg-brand-600 hover:bg-brand-700'
+                                                    }`}
+                                                >
+                                                    {logoSaved ? <><CheckCircle size={11} /> Saved</> : <><Save size={11} /> Save Logo Test Result</>}
                                                 </button>
                                             </div>
                                         )}
@@ -431,12 +496,12 @@ export default function BrandChecklist({
                                         <button
                                             onClick={() => handleStartTest('window_motif')}
                                             className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
-                                                overlayState.activeTest === 'window_motif'
+                                                !motifSaved && overlayState.activeTest === 'window_motif'
                                                     ? 'bg-brand-700 text-white shadow-inner'
                                                     : 'bg-brand-600 text-white hover:bg-brand-700'
                                             }`}
                                         >
-                                            {overlayState.activeTest === 'window_motif' ? 'Testing…' : motifSaved ? 'Re-test' : 'Test'}
+                                            {motifSaved ? 'Re-test' : overlayState.activeTest === 'window_motif' ? 'Testing…' : 'Test'}
                                         </button>
                                     </div>
                                 </div>
@@ -492,19 +557,32 @@ export default function BrandChecklist({
                                                 <textarea
                                                     value={motifComment}
                                                     onChange={e => { setMotifComment(e.target.value); setMotifSaved(false); onOverlayChange({ ...overlayState, testResult: 'not_ok', testComment: e.target.value }); }}
-                                                    className="w-full p-2 border border-red-300 rounded-lg text-[11px] resize-none focus:ring-2 focus:ring-red-400 outline-none leading-relaxed bg-red-50/40"
+                                                    disabled={motifSaved}
+                                                    className="w-full p-2 border border-red-300 rounded-lg text-[11px] resize-none focus:ring-2 focus:ring-red-400 outline-none leading-relaxed bg-red-50/40 disabled:opacity-60"
                                                     rows={4}
                                                 />
-                                                <button onClick={handleSaveMotif} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors">
-                                                    <Save size={11} /> Save Motif Test Result
+                                                <button
+                                                    onClick={handleSaveMotif}
+                                                    disabled={motifSaved}
+                                                    className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
+                                                        motifSaved ? 'bg-green-600 text-white cursor-default' : 'text-white bg-brand-600 hover:bg-brand-700'
+                                                    }`}
+                                                >
+                                                    {motifSaved ? <><CheckCircle size={11} /> Saved</> : <><Save size={11} /> Save Motif Test Result</>}
                                                 </button>
                                             </div>
                                         )}
                                         {motifResult === 'ok' && (
                                             <div className="space-y-1.5">
                                                 <p className="text-[11px] text-green-600 font-medium">✅ Motif placement looks good.</p>
-                                                <button onClick={handleSaveMotif} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors">
-                                                    <Save size={11} /> Save Motif Test Result
+                                                <button
+                                                    onClick={handleSaveMotif}
+                                                    disabled={motifSaved}
+                                                    className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors ${
+                                                        motifSaved ? 'bg-green-600 text-white cursor-default' : 'text-white bg-brand-600 hover:bg-brand-700'
+                                                    }`}
+                                                >
+                                                    {motifSaved ? <><CheckCircle size={11} /> Saved</> : <><Save size={11} /> Save Motif Test Result</>}
                                                 </button>
                                             </div>
                                         )}
@@ -516,6 +594,7 @@ export default function BrandChecklist({
                     </div>
                 )}
             </div>
+            )}
         </div>
     );
 }

@@ -89,10 +89,15 @@ export async function fileToBase64(file: Blob): Promise<string> {
 
 // === Download current data as JSON ===
 export function downloadJson() {
-    // Strip runtime-only blob fields before saving (keep fileBase64)
+    // Strip runtime-only blob fields before saving (keep fileBase64 for images only)
     const cleaned: DocuReviewData = {
         reviews: store.reviews.map(r => {
             const { fileBlob, fileBlobUrl, ...rest } = r;
+            // Don't persist PDF binary data — too large for JSON download to be useful
+            if (rest.fileType === 'pdf') {
+                const { fileBase64, ...pdfRest } = rest;
+                return pdfRest;
+            }
             return rest;
         }),
     };
@@ -113,13 +118,19 @@ export function saveToLocalStorage() {
     const cleaned: DocuReviewData = {
         reviews: store.reviews.map(r => {
             const { fileBlob, fileBlobUrl, ...rest } = r;
+            // PDFs are too large to store as base64 in localStorage (5MB quota)
+            // Strip fileBase64 for PDFs — metadata + annotations still persist
+            if (rest.fileType === 'pdf') {
+                const { fileBase64, ...pdfRest } = rest;
+                return pdfRest;
+            }
             return rest;
         }),
     };
     try {
         localStorage.setItem('brandreview_data', JSON.stringify(cleaned));
     } catch (e) {
-        // localStorage may exceed quota with large base64 data
+        // localStorage may exceed quota with large base64 image data
         console.warn('Could not save to localStorage (data may be too large):', e);
     }
 }
