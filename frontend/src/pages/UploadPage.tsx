@@ -115,7 +115,6 @@ export default function UploadPage() {
                 status:          'in_progress',
                 created_at:      new Date().toISOString(),
                 annotations:     [],
-                score:           null,
                 fileBase64:      base64,
                 fileBlob:        file,
                 fileBlobUrl:     blobUrl,
@@ -226,12 +225,12 @@ export default function UploadPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-surface-600 mb-1">Job ID <span className="text-danger">*</span></label>
+                            <label className="block text-xs font-medium text-surface-600 mb-1">WF Request Number <span className="text-danger">*</span></label>
                             <input
                                 value={jobId}
                                 onChange={e => setJobId(e.target.value)}
                                 className="w-full p-2.5 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
-                                placeholder="e.g. JOB-001"
+                                placeholder="e.g. WF-2024-001"
                             />
                         </div>
                     </div>

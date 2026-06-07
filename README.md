@@ -42,9 +42,9 @@ Built for KPMG brand reviewers to annotate images and PDFs, run logo placement a
 - Click any review to re-open it
 
 ### 📤 Export & Share
-- **Save as PDF** — generates an annotated image (page 1) plus a drawn summary page with all comments and brand test results (page 2)
-- **Save PDF & Send to Designer** — exports PDF then opens a pre-filled `mailto:` draft with the full review summary
-- **Download JSON** — exports all review metadata and annotations (without PDF binary data)
+- **Save PDF** — generates an annotated image (page 1) plus a drawn summary page with all comments and brand test results (page 2)
+- **Send to Designer** — opens a pre-filled `mailto:` draft with the full review summary (you can manually attach the downloaded PDF)
+- **Download JSON** — exports all review metadata, annotations, and test results (without PDF binary data)
 - **Load JSON** — restore a workspace from a previously downloaded file; supports merge or replace
 
 ---
@@ -108,9 +108,9 @@ Distribute the `dist/index.html` file to anyone. They can double-click it to ope
 2. **Annotate** — Draw rectangles on the image or PDF page; add a comment in the modal that appears
 3. **Brand Checklist** *(images only)* — Select the target platform, check image dimensions, run logo and motif overlay tests, save each result
 4. **PDF Navigation** — For PDF uploads, use the pagination bar below the viewer to navigate pages and annotate per page
-5. **Export** — Click **Save as PDF** to download the annotated report, or **Save PDF & Send to Designer** to also open a pre-filled email draft
-6. **Persist** — Click **Save Annotations** to persist to `localStorage`; use **Download JSON** to save a portable backup
-7. **Resume** — Open the app later and **Load JSON** to restore your workspace (merge or replace existing data)
+5. **Persist & Complete** — Click **Save & Mark Complete** to calculate the test score, save the progress, and move the file to the Completed dashboard
+6. **Export** — Click **Save PDF** to download the annotated report, or **Send to Designer** to email the designer
+7. **Resume / Backup** — Open the app later and **Load JSON** to restore your workspace (merge or replace existing data), or use **Download JSON** to backup
 
 ---
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { Review, ReviewScore } from '../types';
+import { Review } from '../types';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
 import { Tag } from 'primereact/tag';
@@ -9,8 +9,10 @@ import { TabView, TabPanel } from 'primereact/tabview';
 import { Dropdown } from 'primereact/dropdown';
 import { Calendar } from 'primereact/calendar';
 import { Chart } from 'primereact/chart';
-import { Download, TrendingUp, FileCheck, MessageSquare, Eye, Play, Mail } from 'lucide-react';
+import { Download, TrendingUp, FileCheck, MessageSquare, Eye, Play, Mail, Trash2 } from 'lucide-react';
 import Papa from 'papaparse';
+
+import { clearDatabase } from '../services/localStore';
 
 export default function ReviewerDashboard() {
     const storeData = useStore();
@@ -49,48 +51,17 @@ export default function ReviewerDashboard() {
 
     const inProgressReviews = filteredReviews.filter(r => r.status === 'in_progress');
     const completedReviews = filteredReviews.filter(r => r.status === 'reviewed');
-
-    // Dashboard metrics from completed reviews
-    const scoredReviews = completedReviews.filter(r => r.score);
-    const avgScore = scoredReviews.length > 0 ? (scoredReviews.reduce((a, r) => a + (r.score?.composite_score || 0), 0) / scoredReviews.length) : 0;
-    const totalReviewed = scoredReviews.length;
-
-    // Chart data
-    const chartLabels = scoredReviews.map(r => r.designer_name || 'Unknown').slice(-10);
-    const chartData = {
-        labels: chartLabels,
-        datasets: [{
-            label: 'Composite Score',
-            data: scoredReviews.map(r => r.score?.composite_score || 0).slice(-10),
-            backgroundColor: '#6d8bc2',
-            borderColor: '#00338d',
-            borderWidth: 2,
-            borderRadius: 6,
-            barThickness: 24,
-        }]
-    };
-
-    const chartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-            y: { beginAtZero: true, max: 120, grid: { color: '#f1f5f9' } },
-            x: { grid: { display: false }, ticks: { maxRotation: 45 } },
-        }
-    };
+    const totalReviewed = completedReviews.length;
 
     const handleExportCSV = () => {
-        const data = scoredReviews.map(r => ({
+        const data = completedReviews.map(r => ({
             'Document': r.title,
             'Job ID': r.job_id,
             'Designer': r.designer_name,
-            'Quality': r.score?.quality,
-            'Complexity': r.score?.complexity,
-            'FTP Band': r.score?.ftp,
-            'Design': r.score?.design,
-            'Repeat Offence': r.score?.repeat_offence,
-            'Composite Score': r.score?.composite_score.toFixed(2),
+            'Style': r.style || 'N/A',
+            'Platform': r.platform || 'N/A',
+            'Test Score': r.testScore || 'N/A',
+            'Annotations Count': r.annotations?.length || 0,
             'Date': r.created_at,
         }));
         const csv = Papa.unparse(data);
@@ -170,22 +141,16 @@ export default function ReviewerDashboard() {
                                         inputClassName="text-sm h-[38px] px-3 py-2 border border-surface-300 rounded-lg"
                                     />
                                 )}
-                                <button onClick={handleExportCSV} disabled={scoredReviews.length === 0} className="flex items-center gap-2 px-4 py-2 h-[38px] text-sm font-medium text-white bg-brand-600 border border-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm disabled:opacity-50">
+                                <button onClick={handleExportCSV} disabled={completedReviews.length === 0} className="flex items-center gap-2 px-4 py-2 h-[38px] text-sm font-medium text-white bg-brand-600 border border-brand-600 rounded-lg hover:bg-brand-700 transition-colors shadow-sm disabled:opacity-50">
                                     <Download size={16} /> Export CSV
+                                </button>
+                                <button onClick={() => { if(window.confirm('Are you sure you want to clear all reviews?')) clearDatabase(); }} className="flex items-center gap-2 px-4 py-2 h-[38px] text-sm font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors shadow-sm">
+                                    <Trash2 size={16} /> Clear All Data
                                 </button>
                             </div>
 
                             {/* Stat Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="bg-gradient-to-br from-brand-50 to-brand-100 rounded-xl p-5 border border-brand-200">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-10 h-10 bg-brand-600 rounded-lg flex items-center justify-center"><TrendingUp size={20} className="text-white" /></div>
-                                        <div>
-                                            <p className="text-xs text-brand-600 font-medium uppercase">Avg Score</p>
-                                            <p className="text-2xl font-bold text-brand-800">{avgScore.toFixed(1)}</p>
-                                        </div>
-                                    </div>
-                                </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border border-green-200">
                                     <div className="flex items-center gap-3 mb-2">
                                         <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center"><FileCheck size={20} className="text-white" /></div>
@@ -206,24 +171,13 @@ export default function ReviewerDashboard() {
                                 </div>
                             </div>
 
-                            {/* Chart */}
-                            <div className="bg-surface-50 rounded-xl p-5 border border-surface-200">
-                                <h3 className="text-sm font-semibold text-surface-700 mb-4">Review Scores (Last 10)</h3>
-                                <div style={{ height: '280px' }}>
-                                    {scoredReviews.length > 0 ? (
-                                        <Chart type="bar" data={chartData} options={chartOptions} />
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full text-surface-400 text-sm">No score data available</div>
-                                    )}
-                                </div>
-                            </div>
-
                             {/* Scores Table */}
-                            <DataTable value={scoredReviews} paginator rows={10} emptyMessage="No scores yet" stripedRows rowHover className="text-sm">
+                            <DataTable value={completedReviews} paginator rows={10} emptyMessage="No reviews completed yet" stripedRows rowHover className="text-sm">
                                 <Column field="title" header="Document" sortable />
                                 <Column field="designer_name" header="Designer" sortable />
-                                <Column header="Quality" sortable body={(r: Review) => r.score?.quality} />
-                                <Column header="Score" sortable body={(r: Review) => <span className="font-semibold">{r.score?.composite_score.toFixed(2)}</span>} />
+                                <Column header="Style" sortable body={(r: Review) => r.style || '—'} />
+                                <Column header="Platform" sortable body={(r: Review) => <span className="capitalize">{r.platform || '—'}</span>} />
+                                <Column header="Test Score" sortable body={(r: Review) => <span className="font-semibold">{r.testScore || '—'}</span>} />
                                 <Column field="created_at" header="Date" sortable body={(r: Review) => new Date(r.created_at).toLocaleDateString()} />
                             </DataTable>
                         </div>
@@ -235,7 +189,6 @@ export default function ReviewerDashboard() {
                             <Column field="title" header="File Name" sortable />
                             <Column field="job_id" header="Job ID" sortable />
                             <Column field="designer_name" header="Designer" sortable />
-                            <Column field="deliverable_type" header="Type" sortable className="capitalize" />
                             <Column field="status" header="Status" body={statusTemplate} sortable />
                             <Column header="Action" body={(rowData: Review) => (
                                 rowData.fileBlobUrl ? (
@@ -258,8 +211,7 @@ export default function ReviewerDashboard() {
                             <Column field="title" header="File Name" sortable />
                             <Column field="job_id" header="Job ID" sortable />
                             <Column field="designer_name" header="Designer" sortable />
-                            <Column field="deliverable_type" header="Type" sortable className="capitalize" />
-                            <Column header="Score" body={(r: Review) => r.score ? <span className="font-semibold">{r.score.composite_score.toFixed(2)}</span> : '—'} />
+                            <Column header="Score" body={(r: Review) => r.testScore ? <span className="font-semibold">{r.testScore}</span> : '—'} />
                             <Column header="Action" body={(rowData: Review) => (
                                 <div className="flex items-center gap-2">
                                     <button onClick={() => navigate(`/view/${rowData.id}`)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-surface-300 text-surface-700 rounded hover:bg-surface-50 transition-colors" title="View">

@@ -192,3 +192,9 @@ export function deleteReview(id: string): void {
     saveToLocalStorage();
     notify();
 }
+
+export function clearDatabase(): void {
+    store = { reviews: [] };
+    saveToLocalStorage();
+    notify();
+}

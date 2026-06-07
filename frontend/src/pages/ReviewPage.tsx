@@ -1,14 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { getReviewById, updateAnnotations } from '../services/localStore';
-import { Review, Annotation, ShapeType } from '../types';
-import { ArrowLeft, Square, Save, FileDown, Trash2, Pencil, Check, X, Info, RotateCcw, Send, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Toast } from 'primereact/toast';
+import { getReviewById, updateAnnotations, updateReview } from '../services/localStore';
+import { Review, Annotation, ShapeType, StyleOption, SimpleTestKey, Platform, CommittedTestResult, SavedSimpleTests } from '../types';
+import { ArrowLeft, Square, Save, FileDown, Trash2, Pencil, Check, X, Info, RotateCcw, Send, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
 import html2canvas from 'html2canvas';
-import { PDFDocument, PDFName, PDFString, rgb } from 'pdf-lib';
-import BrandChecklist, { LogoOverlayState, CommittedTestResult } from '../components/review/BrandChecklist';
+import { PDFDocument, PDFName, PDFString, PDFHexString, rgb } from 'pdf-lib';
+import BrandChecklist, { LogoOverlayState } from '../components/review/BrandChecklist';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import {
+    TYPOGRAPHY_TITLE_TEXT, TYPOGRAPHY_SUBTITLE_TEXT,
+    TYPOGRAPHY_TITLE_FONT_FAMILY, TYPOGRAPHY_SUBTITLE_FONT_FAMILY,
+    TYPOGRAPHY_TITLE_FONT_SIZE, TYPOGRAPHY_TITLE_FONT_WEIGHT,
+    TYPOGRAPHY_SUBTITLE_FONT_SIZE, TYPOGRAPHY_SUBTITLE_FONT_WEIGHT,
+    TYPOGRAPHY_COLOR, TYPOGRAPHY_TITLE_FROM_TOP,
+} from '../constants/typographyConstants';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
@@ -18,11 +26,49 @@ const LOGO_BLUE_SRC = '/KPMG_blue_logo.svg';
 const LOGO_ASPECT = 80.58 / 32.08; // ≈ 2.514
 const LOGO_BASE_W = 120; // px at scale 1
 
+// ── Style sample image mapping ────────────────────────────────────────────────
+const STYLE_SAMPLE_IMAGES: Partial<Record<StyleOption, string>> = {
+    'style1.1': '/sample-1.jpg',
+    'style1.2': '/sample-2.jpg',
+    'style2':   '/sample-3.jpg',
+    'style3.1': '/sample-4.jpg',
+    'style3.2': '/sample-5.jpg',
+    'style4':   '/sample-6.jpg',
+    'style5':   '/sample-1.jpg',
+};
+
+// ── Simple test human-readable labels (for PDF) ───────────────────────────────
+const SIMPLE_TEST_LABELS: Record<SimpleTestKey, string> = {
+    gradient:         'Gradient',
+    portraits:        'Portraits',
+    diversity:        'Diversity',
+    body_copy_arial:  'Body copy text Arial',
+    copyright:        'Copyright',
+    colors:           'Colors',
+    window_bg_colors: 'Available window and background colors',
+    type_in_window:   'Type and messages placed within the window',
+    bg_3_colors:      'Background – 3 colors to appear',
+    image_breakout:   'Image breaking out of the window (12 ways)',
+    neutral_image:    'The window always has a neutral-toned image with pops of color',
+};
+
+// ── Test visibility matrix (mirrors BrandChecklist) ───────────────────────────
+const TEST_MATRIX: Record<StyleOption, Record<string, boolean>> = {
+    'style1.1': { logo_space:true, typography:true, window_motif:true, text_clear_space:true, gradient:true,  portraits:true,  diversity:true,  body_copy_arial:true, copyright:true, colors:true, window_bg_colors:false, type_in_window:false, bg_3_colors:false, image_breakout:false, neutral_image:false },
+    'style1.2': { logo_space:true, typography:true, window_motif:true, text_clear_space:true, gradient:true,  portraits:false, diversity:false, body_copy_arial:true, copyright:true, colors:true, window_bg_colors:false, type_in_window:false, bg_3_colors:false, image_breakout:false, neutral_image:false },
+    'style2':   { logo_space:true, typography:true, window_motif:true, text_clear_space:true, gradient:true,  portraits:false, diversity:false, body_copy_arial:true, copyright:true, colors:true, window_bg_colors:true,  type_in_window:true,  bg_3_colors:false, image_breakout:false, neutral_image:false },
+    'style3.1': { logo_space:true, typography:true, window_motif:true, text_clear_space:true, gradient:true,  portraits:false, diversity:true,  body_copy_arial:true, copyright:true, colors:true, window_bg_colors:false, type_in_window:false, bg_3_colors:true,  image_breakout:true,  neutral_image:false },
+    'style3.2': { logo_space:true, typography:true, window_motif:true, text_clear_space:true, gradient:true,  portraits:false, diversity:false, body_copy_arial:true, copyright:true, colors:true, window_bg_colors:false, type_in_window:false, bg_3_colors:true,  image_breakout:true,  neutral_image:false },
+    'style4':   { logo_space:true, typography:true, window_motif:true, text_clear_space:true, gradient:true,  portraits:false, diversity:true,  body_copy_arial:true, copyright:true, colors:true, window_bg_colors:false, type_in_window:false, bg_3_colors:false, image_breakout:false, neutral_image:true  },
+    'style5':   { logo_space:true, typography:true, window_motif:false,text_clear_space:true, gradient:false, portraits:false, diversity:false, body_copy_arial:true, copyright:true, colors:true, window_bg_colors:false, type_in_window:false, bg_3_colors:false, image_breakout:false, neutral_image:false },
+};
+
 export default function ReviewPage() {
     const { reviewId } = useParams<{ reviewId: string }>();
     const storeData = useStore();
     const navigate = useNavigate();
     const viewerRef = useRef<HTMLDivElement>(null);
+    const toastRef = useRef<Toast>(null);
 
     const [review, setReview] = useState<Review | null>(null);
     const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -44,18 +90,31 @@ export default function ReviewPage() {
     const [sidebarEditComment, setSidebarEditComment] = useState('');
 
     // Logo overlay state (owned here so overlay renders inside canvas)
-    const [logoOverlay, setLogoOverlay] = useState<LogoOverlayState>({ activeTest: null, pos: { x: 0, y: 0 }, scale: 1, opacity: 1, windowRatio: '7:10', testResult: null, testComment: '' });
-    // Separately committed test results — only populated after the user clicks "Save Result"
-    const [savedLogoResult, setSavedLogoResult] = useState<CommittedTestResult | null>(null);
-    const [savedMotifResult, setSavedMotifResult] = useState<CommittedTestResult | null>(null);
-    const [savedSizeResult, setSavedSizeResult] = useState<CommittedTestResult | null>(null);
-    // Natural pixel dimensions of the uploaded image (set on img onLoad)
+    const [logoOverlay, setLogoOverlay] = useState<LogoOverlayState>({
+        activeTest: null, pos: { x: 0, y: 0 }, scale: 1, opacity: 1, windowRatio: '7:10', testResult: null, testComment: '',
+    });
+    // Separately committed test results
+    const [savedLogoResult,       setSavedLogoResult]       = useState<CommittedTestResult | null>(null);
+    const [savedMotifResult,      setSavedMotifResult]       = useState<CommittedTestResult | null>(null);
+    const [savedSizeResult,       setSavedSizeResult]        = useState<CommittedTestResult | null>(null);
+    const [savedTypographyResult, setSavedTypographyResult] = useState<CommittedTestResult | null>(null);
+    const [savedTextClearResult,  setSavedTextClearResult]  = useState<CommittedTestResult | null>(null);
+    const [savedSimpleTests,      setSavedSimpleTests]       = useState<SavedSimpleTests>({});
+
+    // Selected style (for center column sample image)
+    const [selectedStyle, setSelectedStyle] = useState<StyleOption | null>(null);
+    // Platform selection
+    const [platform, setPlatform] = useState<Platform | ''>('');
+    // Style reference modal
+    const [styleModalOpen, setStyleModalOpen] = useState(false);
+
+    // Natural pixel dimensions of the uploaded image
     const [imageDimensions, setImageDimensions] = useState<{ w: number; h: number } | null>(null);
     // When true, logo is hidden so html2canvas excludes it from the PDF capture
     const [logoHiddenForCapture, setLogoHiddenForCapture] = useState(false);
     // Active logo src (blue or white)
     const [logoSrc, setLogoSrc] = useState(LOGO_BLUE_SRC);
-    // Incremented on "Reset All" to force BrandChecklist remount (clears its internal state)
+    // Incremented on "Reset All" to force BrandChecklist remount
     const [brandChecklistKey, setBrandChecklistKey] = useState(0);
     const logoDragging = useRef(false);
     const logoDragStart = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
@@ -66,7 +125,6 @@ export default function ReviewPage() {
     const [totalPages, setTotalPages] = useState(1);
     const [pageImageUrl, setPageImageUrl] = useState<string | null>(null);
     const [pageRendering, setPageRendering] = useState(false);
-    // Jump-to-page input value
     const [jumpInput, setJumpInput] = useState('1');
 
     const isPdf = review?.fileType === 'pdf';
@@ -77,96 +135,72 @@ export default function ReviewPage() {
             if (r) {
                 setReview(r);
                 setAnnotations(r.annotations || []);
-                if (r.fileType === 'pdf' && r.totalPages) {
-                    setTotalPages(r.totalPages);
-                }
+                if (r.fileType === 'pdf' && r.totalPages) setTotalPages(r.totalPages);
+                if (r.style) setSelectedStyle(r.style as StyleOption);
+                if (r.platform) setPlatform(r.platform as Platform);
+                
+                if (r.savedLogoResult) setSavedLogoResult(r.savedLogoResult);
+                if (r.savedMotifResult) setSavedMotifResult(r.savedMotifResult);
+                if (r.savedSizeResult) setSavedSizeResult(r.savedSizeResult);
+                if (r.savedTypographyResult) setSavedTypographyResult(r.savedTypographyResult);
+                if (r.savedTextClearResult) setSavedTextClearResult(r.savedTextClearResult);
+                if (r.savedSimpleTests) setSavedSimpleTests(r.savedSimpleTests);
             }
             setLoading(false);
         }
     }, [reviewId, storeData]);
 
-    // ── Load pdfjs document once when review is ready ─────────────────────────
     useEffect(() => {
         if (!review || review.fileType !== 'pdf' || !review.fileBlobUrl) return;
-
         let cancelled = false;
         (async () => {
             try {
                 const resp = await fetch(review.fileBlobUrl!);
                 const arrayBuffer = await resp.arrayBuffer();
                 const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                if (!cancelled) {
-                    setPdfDoc(doc);
-                    setTotalPages(doc.numPages);
-                    setCurrentPage(1);
-                    setJumpInput('1');
-                }
-            } catch (err) {
-                console.error('Failed to load PDF:', err);
-            }
+                if (!cancelled) { setPdfDoc(doc); setTotalPages(doc.numPages); setCurrentPage(1); setJumpInput('1'); }
+            } catch (err) { console.error('Failed to load PDF:', err); }
         })();
         return () => { cancelled = true; };
     }, [review?.id, review?.fileBlobUrl]);
 
-    // ── Render a specific PDF page to an image URL ────────────────────────────
     useEffect(() => {
         if (!pdfDoc) return;
-
         let cancelled = false;
         setPageRendering(true);
-
         (async () => {
             try {
                 const page = await pdfDoc.getPage(currentPage);
                 const viewport = page.getViewport({ scale: 1.8 });
                 const canvas = document.createElement('canvas');
-                canvas.width  = viewport.width;
-                canvas.height = viewport.height;
+                canvas.width = viewport.width; canvas.height = viewport.height;
                 const ctx = canvas.getContext('2d')!;
-                await page.render({ canvasContext: ctx, viewport }).promise;
+                await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
                 if (!cancelled) {
                     const url = canvas.toDataURL('image/png');
-                    setPageImageUrl(prev => {
-                        if (prev) URL.revokeObjectURL(prev);
-                        return url;
-                    });
+                    setPageImageUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
                     setImageDimensions({ w: canvas.width, h: canvas.height });
                     setPageRendering(false);
                 }
-            } catch (err) {
-                if (!cancelled) { console.error('Page render error:', err); setPageRendering(false); }
-            }
+            } catch (err) { if (!cancelled) { console.error('Page render error:', err); setPageRendering(false); } }
         })();
-
         return () => { cancelled = true; };
     }, [pdfDoc, currentPage]);
 
-    // Sync jump input when page changes via buttons
     useEffect(() => { setJumpInput(String(currentPage)); }, [currentPage]);
 
-    const goToPage = (page: number) => {
-        const clamped = Math.max(1, Math.min(totalPages, page));
-        setCurrentPage(clamped);
-    };
-
-    const handleJumpInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setJumpInput(e.target.value);
-    };
-
+    const goToPage = (page: number) => setCurrentPage(Math.max(1, Math.min(totalPages, page)));
+    const handleJumpInputChange = (e: React.ChangeEvent<HTMLInputElement>) => setJumpInput(e.target.value);
     const handleJumpCommit = () => {
         const n = parseInt(jumpInput, 10);
-        if (!isNaN(n)) goToPage(n);
-        else setJumpInput(String(currentPage));
+        if (!isNaN(n)) goToPage(n); else setJumpInput(String(currentPage));
     };
 
     // ── Drawing ───────────────────────────────────────────────────────────────
     const getRelativeCoords = (e: React.MouseEvent) => {
         if (!viewerRef.current) return { pctX: 0, pctY: 0 };
         const rect = viewerRef.current.getBoundingClientRect();
-        return {
-            pctX: ((e.clientX - rect.left) / rect.width) * 100,
-            pctY: ((e.clientY - rect.top) / rect.height) * 100,
-        };
+        return { pctX: ((e.clientX - rect.left) / rect.width) * 100, pctY: ((e.clientY - rect.top) / rect.height) * 100 };
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -176,26 +210,17 @@ export default function ReviewPage() {
         setStartPoint({ x: c.pctX, y: c.pctY });
         setCurrentRect({ x: c.pctX, y: c.pctY, w: 0, h: 0 });
     };
-
     const handleMouseMove = (e: React.MouseEvent) => {
         if (!isDrawing || !startPoint) return;
         const c = getRelativeCoords(e);
-        setCurrentRect({
-            x: Math.min(c.pctX, startPoint.x),
-            y: Math.min(c.pctY, startPoint.y),
-            w: Math.abs(c.pctX - startPoint.x),
-            h: Math.abs(c.pctY - startPoint.y),
-        });
+        setCurrentRect({ x: Math.min(c.pctX, startPoint.x), y: Math.min(c.pctY, startPoint.y), w: Math.abs(c.pctX - startPoint.x), h: Math.abs(c.pctY - startPoint.y) });
     };
-
     const handleMouseUp = () => {
         if (!isDrawing || !currentRect) return;
         setIsDrawing(false);
         if (currentRect.w < 1 || currentRect.h < 1) { setCurrentRect(null); return; }
         setTempShape({ type: ShapeType.RECTANGLE, x: currentRect.x, y: currentRect.y, width: currentRect.w, height: currentRect.h });
-        setComment('');
-        setEditingId(null);
-        setCommentModalOpen(true);
+        setComment(''); setEditingId(null); setCommentModalOpen(true);
     };
 
     // ── Comments ──────────────────────────────────────────────────────────────
@@ -205,284 +230,341 @@ export default function ReviewPage() {
             setAnnotations(prev => prev.map(a => a.id === editingId ? { ...a, comment } : a));
         } else if (tempShape) {
             const newAnn: Annotation = {
-                id: crypto.randomUUID(),
-                type: ShapeType.RECTANGLE,
+                id: crypto.randomUUID(), type: ShapeType.RECTANGLE,
                 pageNumber: isPdf ? currentPage : 1,
                 x: tempShape.x || 0, y: tempShape.y || 0,
                 width: tempShape.width || 0, height: tempShape.height || 0,
-                comment,
-                timestamp: Date.now(),
+                comment, timestamp: Date.now(),
             };
             setAnnotations(prev => [...prev, newAnn]);
         }
         closeCommentModal();
     };
-
     const closeCommentModal = () => {
-        setCommentModalOpen(false); setCurrentRect(null);
-        setTempShape(null); setEditingId(null); setComment('');
+        setCommentModalOpen(false); setCurrentRect(null); setTempShape(null); setEditingId(null); setComment('');
     };
-
     const handleAnnotationClick = (e: React.MouseEvent, ann: Annotation) => {
-        e.stopPropagation();
-        setEditingId(ann.id);
-        setComment(ann.comment || '');
-        setCommentModalOpen(true);
+        e.stopPropagation(); setEditingId(ann.id); setComment(ann.comment || ''); setCommentModalOpen(true);
     };
-
     const removeAnnotation = (id: string) => setAnnotations(prev => prev.filter(a => a.id !== id));
-
-    // Annotations visible on the current page/view
-    const visibleAnnotations = isPdf
-        ? annotations.filter(a => a.pageNumber === currentPage)
-        : annotations;
+    const visibleAnnotations = isPdf ? annotations.filter(a => a.pageNumber === currentPage) : annotations;
 
     // ── Logo drag ─────────────────────────────────────────────────────────────
     const handleLogoDragStart = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         logoDragging.current = true;
         logoDragStart.current = { mx: e.clientX, my: e.clientY, ox: logoOverlay.pos.x, oy: logoOverlay.pos.y };
         const onMove = (ev: MouseEvent) => {
             if (!logoDragging.current || !viewerRef.current) return;
             const canvas = viewerRef.current;
-            const canvasW = canvas.offsetWidth;
-            const canvasH = canvas.offsetHeight;
-            let groupW = LOGO_BASE_W * logoOverlay.scale;
-            let groupH = 0;
+            const canvasW = canvas.offsetWidth; const canvasH = canvas.offsetHeight;
+            let groupW = LOGO_BASE_W * logoOverlay.scale; let groupH = 0;
             if (logoOverlay.activeTest === 'logo') {
                 const scaledH = Math.round(groupW / LOGO_ASPECT);
                 groupH = scaledH * 3;
-            } else {
+            } else if (logoOverlay.activeTest === 'window_motif') {
                 groupH = logoOverlay.windowRatio === '7:10' ? groupW * (10/7) : groupW * (7/10);
             }
             const newX = logoDragStart.current.ox + ev.clientX - logoDragStart.current.mx;
             const newY = logoDragStart.current.oy + ev.clientY - logoDragStart.current.my;
             setLogoOverlay(prev => ({
-                ...prev,
-                pos: {
+                ...prev, pos: {
                     x: Math.max(0, Math.min(newX, canvasW - groupW)),
                     y: Math.max(0, Math.min(newY, canvasH - groupH)),
                 },
             }));
         };
-        const onUp = () => {
-            logoDragging.current = false;
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-        };
+        const onUp = () => { logoDragging.current = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
     }, [logoOverlay.pos, logoOverlay.scale]);
 
     // ── Actions ───────────────────────────────────────────────────────────────
-    const handleSaveAnnotations = () => {
-        if (!reviewId) return;
-        updateAnnotations(reviewId, annotations);
-        alert('Annotations saved!');
+    const handleSaveAndComplete = () => {
+        if (!reviewId || !review) return;
+
+        let testScore = "NA";
+
+        if (!isPdf && selectedStyle) {
+            const allTestRows = buildAllTestResults();
+            const validRows = allTestRows.filter(r => r.result !== null);
+            const total = validRows.length;
+            const okCount = validRows.filter(r => r.result?.result === 'ok').length;
+            testScore = total > 0 ? `${okCount}/${total}` : "0/0";
+        }
+
+        updateReview(reviewId, {
+            ...review,
+            annotations,
+            testScore,
+            style: selectedStyle,
+            platform,
+            status: 'reviewed',
+            savedLogoResult,
+            savedMotifResult,
+            savedSizeResult,
+            savedTypographyResult,
+            savedTextClearResult,
+            savedSimpleTests,
+        });
+
+        toastRef.current?.show({ severity: 'success', summary: 'Success', detail: 'Progress saved and marked as complete!', life: 3000 });
     };
 
-    // Reset ALL — clears annotations, test results, and remounts BrandChecklist
     const handleResetAll = () => {
         setAnnotations([]);
-        setSavedLogoResult(null);
-        setSavedMotifResult(null);
-        setSavedSizeResult(null);
+        setSavedLogoResult(null); setSavedMotifResult(null); setSavedSizeResult(null);
+        setSavedTypographyResult(null); setSavedTextClearResult(null); setSavedSimpleTests({});
+        setSelectedStyle(null);
         setLogoOverlay({ activeTest: null, pos: { x: 0, y: 0 }, scale: 1, opacity: 1, windowRatio: '7:10', testResult: null, testComment: '' });
         setBrandChecklistKey(k => k + 1);
     };
 
+    // ── Computed logo/motif dimensions ────────────────────────────────────────
+    const scaledW = LOGO_BASE_W * logoOverlay.scale;
+    const scaledH = Math.round(scaledW / LOGO_ASPECT); // logo height at current scale
+    const motifH = logoOverlay.windowRatio === '7:10' ? scaledW * (10/7) : scaledW * (7/10);
+
+    // One logo space = logo height (shorter dimension) = scaledH at scale 1
+    const logoSpace = Math.round(LOGO_BASE_W / LOGO_ASPECT); // ≈ 48px at base scale
+
+    // Text Clear Space margin = one logo-HEIGHT (shorter dim) × scale → keeps lines close to image border
+    const textClearMargin = logoSpace * logoOverlay.scale;
+
+    // Display src
+    const displaySrc = isPdf ? pageImageUrl : review?.fileBlobUrl;
+
+    // ── Build all test results for PDF/email ──────────────────────────────────
+    const buildAllTestResults = () => {
+        if (!selectedStyle) return [];
+        const matrix = TEST_MATRIX[selectedStyle];
+        const rows: { label: string; result: CommittedTestResult | null }[] = [];
+
+        // Always include Image Size test if it exists
+        rows.push({ label: 'Image Size Test', result: savedSizeResult });
+
+        if (matrix.logo_space)       rows.push({ label: 'Logo Space Test',         result: savedLogoResult });
+        if (matrix.typography)       rows.push({ label: 'Typography Test',          result: savedTypographyResult });
+        if (matrix.window_motif)     rows.push({ label: 'Window Motif Test',        result: savedMotifResult });
+        if (matrix.text_clear_space) rows.push({ label: 'Text Clear Space Test',    result: savedTextClearResult });
+
+        // Simple tests
+        const simpleKeys = Object.keys(SIMPLE_TEST_LABELS) as (keyof typeof SIMPLE_TEST_LABELS)[];
+        for (const k of simpleKeys) {
+            if (matrix[k]) {
+                rows.push({ label: SIMPLE_TEST_LABELS[k], result: savedSimpleTests[k as SimpleTestKey] ?? null });
+            }
+        }
+        return rows;
+    };
+
+    // ── PDF export ────────────────────────────────────────────────────────────
     const handleSaveAsPdf = async () => {
         if (!viewerRef.current || !review) return;
         try {
-            // ── Step 1: Capture image WITHOUT logo overlay ─────────────────
             setLogoHiddenForCapture(true);
             await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-            const canvasEl = await html2canvas(viewerRef.current, {
-                scale: 2, useCORS: true, logging: false, backgroundColor: '#fff',
-            });
+            const canvasEl = await html2canvas(viewerRef.current, { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff' });
             setLogoHiddenForCapture(false);
 
             const imgDataUrl = canvasEl.toDataURL('image/png');
             const base64 = imgDataUrl.split(',')[1];
             const imgBytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-            const canvasW = canvasEl.width;
-            const canvasH = canvasEl.height;
+            const canvasW = canvasEl.width; const canvasH = canvasEl.height;
 
-            // ── Step 2: Build PDF ─────────────────────────────────────────
-            const pdfDoc = await PDFDocument.create();
-
+            const pdfDocLib = await PDFDocument.create();
             const { StandardFonts } = await import('pdf-lib');
-            const regFont  = await pdfDoc.embedFont(StandardFonts.Helvetica);
-            const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+            const regFont  = await pdfDocLib.embedFont(StandardFonts.Helvetica);
+            const boldFont = await pdfDocLib.embedFont(StandardFonts.HelveticaBold);
 
             // ── Page 1: Annotated image ───────────────────────────────────
-            const imgPage = pdfDoc.addPage([canvasW, canvasH]);
-            const pngImage = await pdfDoc.embedPng(imgBytes);
+            const imgPage = pdfDocLib.addPage([canvasW, canvasH]);
+            const pngImage = await pdfDocLib.embedPng(imgBytes);
             imgPage.drawImage(pngImage, { x: 0, y: 0, width: canvasW, height: canvasH });
 
             const hexToRgb = (hex: string) => {
                 const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-                return m
-                    ? { r: parseInt(m[1], 16) / 255, g: parseInt(m[2], 16) / 255, b: parseInt(m[3], 16) / 255 }
-                    : { r: 0.4, g: 0.4, b: 1 };
+                return m ? { r: parseInt(m[1], 16) / 255, g: parseInt(m[2], 16) / 255, b: parseInt(m[3], 16) / 255 } : { r: 0.4, g: 0.4, b: 1 };
             };
             const annColor = hexToRgb(HIGHLIGHT_COLOR);
 
-            // Draw annotation rectangles + sticky notes (custom comments)
             visibleAnnotations.forEach((ann, i) => {
                 const ax = (ann.x / 100) * canvasW;
                 const aw = (ann.width / 100) * canvasW;
                 const ah = (ann.height / 100) * canvasH;
+                // PDF coordinate system is bottom-up; convert top-down percentage
                 const ay = canvasH - ((ann.y / 100) * canvasH) - ah;
 
+                // ── 1. Visual rectangle drawn as PDF vector on page 1 ───────
                 imgPage.drawRectangle({
                     x: ax, y: ay, width: aw, height: ah,
                     borderColor: rgb(annColor.r, annColor.g, annColor.b),
-                    borderWidth: 3,
-                    color:       rgb(annColor.r, annColor.g, annColor.b),
-                    opacity: 0.15, borderOpacity: 0.9,
+                    borderWidth: 4,
+                    color: rgb(annColor.r, annColor.g, annColor.b),
+                    opacity: 0.12,
+                    borderOpacity: 1,
                 });
-                imgPage.drawCircle({ x: ax + 10, y: ay + ah - 10, size: 10, color: rgb(0.1, 0.1, 0.1) });
 
-                const annotRef = pdfDoc.context.register(pdfDoc.context.obj({
-                    Type: 'Annot', Subtype: 'Text', Name: PDFName.of('Comment'),
-                    Rect: [ax, ay, ax + aw, ay + ah],
-                    Contents: PDFString.of(`#${i + 1}: ${ann.comment || '(no comment)'}`),
-                    T: PDFString.of('Brand Reviewer'), Open: false,
-                    C: [annColor.r, annColor.g, annColor.b],
-                }));
+                // ── 2. Numbered badge (filled circle + white digit) ──────────
+                const badgeR = 14;
+                const badgeCx = ax + badgeR + 2;
+                const badgeCy = ay + ah - badgeR - 2;
+                imgPage.drawCircle({ x: badgeCx, y: badgeCy, size: badgeR, color: rgb(0.12, 0.27, 0.89) });
+                const numStr = String(i + 1);
+                imgPage.drawText(numStr, {
+                    x: badgeCx - (numStr.length > 1 ? 7 : 4),
+                    y: badgeCy - 5,
+                    size: 10, font: boldFont, color: rgb(1, 1, 1),
+                });
+
+                // ── 3. Native PDF sticky-note annotation ─────────────────────
+                const annotRef = pdfDocLib.context.register(
+                    pdfDocLib.context.obj({
+                        Type:     PDFName.of('Annot'),
+                        Subtype:  PDFName.of('Text'),
+                        Name:     PDFName.of('Comment'), // Standard Acrobat icon
+                        Rect:     [badgeCx - badgeR, badgeCy - badgeR, badgeCx + badgeR, badgeCy + badgeR],
+                        Contents: PDFString.of(`#${i + 1}: ${ann.comment || '(no comment)'}`),
+                        T:        PDFString.of('Brand Reviewer'),
+                        Subj:     PDFString.of('Comment'),
+                        Open:     false,
+                        F:        28, // Print | NoZoom | NoRotate
+                        C:        [annColor.r, annColor.g, annColor.b],
+                        P:        imgPage.ref,
+                    })
+                );
                 imgPage.node.addAnnot(annotRef);
             });
 
-            // Native sticky notes for ALL brand test results (OK and NOT OK)
-            const brandTestNotes: { label: string; result: CommittedTestResult | null }[] = [
-                { label: 'LOGO PLACEMENT', result: savedLogoResult },
-                { label: 'WINDOW MOTIF',   result: savedMotifResult },
-                { label: 'IMAGE SIZE',     result: savedSizeResult  },
-            ];
-            brandTestNotes.forEach(({ label, result }, idx) => {
-                if (!result) return;
-                const status   = result.result === 'ok' ? 'OK' : 'NOT OK';
-                const body     = result.comment ? `${label} — ${status}:\n${result.comment}` : `${label} — ${status}`;
-                const noteY    = canvasH - 90 - idx * 80;
-                const noteColor = result.result === 'ok' ? [0.1, 0.65, 0.2] : [0.88, 0.18, 0.18];
-                const ref = pdfDoc.context.register(pdfDoc.context.obj({
-                    Type: 'Annot', Subtype: 'Text', Name: PDFName.of('Note'),
-                    Rect: [20, noteY, 260, noteY + 70],
-                    Contents: PDFString.of(body),
-                    T: PDFString.of('Brand Reviewer'), Open: false,
-                    C: noteColor,
-                }));
-                imgPage.node.addAnnot(ref);
+            // Tell Acrobat to generate appearance streams for the annotations
+            const acroForm = pdfDocLib.context.obj({
+                NeedAppearances: true,
             });
+            pdfDocLib.catalog.set(PDFName.of('AcroForm'), pdfDocLib.context.register(acroForm));
 
-            // ── Page 2: Drawn Summary ─────────────────────────────────────
-            const A4W = 1190;
-            const A4H = 1684;
-            const M   = 80;
-            const IW  = A4W - 2 * M;
+            // ── 4. Native sticky notes for ALL brand test results (OK and NOT OK) ──
+            if (!isPdf && selectedStyle) {
+                const allTestRows = buildAllTestResults();
+                let noteIndex = 0;
+                allTestRows.forEach(({ label, result }) => {
+                    if (!result) return;
+                    
+                    const status = result.result === 'ok' ? 'OK' : 'NOT OK';
+                    const body = result.comment ? `${label} — ${status}:\n${result.comment}` : `${label} — ${status}`;
+                    const noteY = canvasH - 40 - noteIndex * 35;
+                    const noteColor = result.result === 'ok' ? { r: 0.1, g: 0.65, b: 0.2 } : { r: 0.88, g: 0.18, b: 0.18 };
+                    
+                    const ref = pdfDocLib.context.register(pdfDocLib.context.obj({
+                        Type:     PDFName.of('Annot'),
+                        Subtype:  PDFName.of('Text'),
+                        Name:     PDFName.of('Comment'),
+                        Rect:     [20, noteY, 50, noteY + 30],
+                        Contents: PDFString.of(body),
+                        T:        PDFString.of('Brand Test Result'),
+                        Open:     false,
+                        F:        28,
+                        C:        [noteColor.r, noteColor.g, noteColor.b],
+                        P:        imgPage.ref,
+                    }));
+                    imgPage.node.addAnnot(ref);
+                    noteIndex++;
+                });
+            }
+
+            // ── Page 2+: Summary (auto-paginates) ────────────────────────
+            const A4W = 1190; const A4H = 1684; const M = 80; const IW = A4W - 2 * M;
 
             const wrapText = (text: string, maxPx: number, ptSize: number): string[] => {
                 const charsPerLine = Math.floor(maxPx / (ptSize * 0.55));
-                const words = text.split(' ');
-                const lines: string[] = [];
-                let cur = '';
+                const words = text.split(' '); const lines: string[] = []; let cur = '';
                 for (const w of words) {
                     const candidate = cur ? `${cur} ${w}` : w;
-                    if (candidate.length > charsPerLine && cur) { lines.push(cur); cur = w; }
-                    else cur = candidate;
+                    if (candidate.length > charsPerLine && cur) { lines.push(cur); cur = w; } else cur = candidate;
                 }
                 if (cur) lines.push(cur);
                 return lines.length ? lines : [''];
             };
 
-            const summaryPage = pdfDoc.addPage([A4W, A4H]);
+            // Mutable page reference so new pages can be added when space runs out
+            let activePage = pdfDocLib.addPage([A4W, A4H]);
             let sy = A4H - M;
 
-            const dt = (text: string, opts: {
-                sz?: number; bold?: boolean;
-                col?: [number, number, number]; indent?: number;
-            } = {}) => {
+            const ensureSpace = (needed: number) => {
+                if (sy < M + needed) {
+                    activePage = pdfDocLib.addPage([A4W, A4H]);
+                    sy = A4H - M;
+                }
+            };
+
+            const dt = (text: string, opts: { sz?: number; bold?: boolean; col?: [number, number, number]; indent?: number } = {}) => {
                 const { sz = 20, bold = false, col = [0.12, 0.12, 0.12], indent = 0 } = opts;
+                ensureSpace(sz + 14);
                 const safeText = (text || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
                 if (!safeText.trim()) { sy -= sz + 8; return; }
-                summaryPage.drawText(safeText, {
-                    x: M + indent, y: sy,
-                    size: sz,
-                    font: bold ? boldFont : regFont,
-                    color: rgb(col[0], col[1], col[2]),
-                });
+                activePage.drawText(safeText, { x: M + indent, y: sy, size: sz, font: bold ? boldFont : regFont, color: rgb(col[0], col[1], col[2]) });
                 sy -= sz + 10;
             };
 
             const drawHRule = () => {
-                summaryPage.drawLine({
-                    start: { x: M, y: sy + 4 }, end: { x: A4W - M, y: sy + 4 },
-                    thickness: 2, color: rgb(0.82, 0.82, 0.82),
-                });
+                ensureSpace(28);
+                activePage.drawLine({ start: { x: M, y: sy + 4 }, end: { x: A4W - M, y: sy + 4 }, thickness: 2, color: rgb(0.82, 0.82, 0.82) });
                 sy -= 18;
             };
 
-            summaryPage.drawRectangle({ x: 0, y: A4H - 130, width: A4W, height: 130, color: rgb(0.12, 0.27, 0.89) });
-            summaryPage.drawText('BRAND REVIEW SUMMARY', { x: M, y: A4H - 52, size: 36, font: boldFont, color: rgb(1, 1, 1) });
-            summaryPage.drawText(review.title,  { x: M, y: A4H - 90,  size: 22, font: regFont, color: rgb(0.78, 0.87, 1) });
-            summaryPage.drawText(`Job: ${review.job_id}   Designer: ${review.designer_name}`,
+            // Draw header banner on first summary page
+            activePage.drawRectangle({ x: 0, y: A4H - 130, width: A4W, height: 130, color: rgb(0.12, 0.27, 0.89) });
+            activePage.drawText('BRAND REVIEW SUMMARY', { x: M, y: A4H - 52, size: 36, font: boldFont, color: rgb(1, 1, 1) });
+            activePage.drawText(review.title, { x: M, y: A4H - 90, size: 22, font: regFont, color: rgb(0.78, 0.87, 1) });
+            activePage.drawText(`Job: ${review.job_id}   Designer: ${review.designer_name}`,
                 { x: M, y: A4H - 118, size: 17, font: regFont, color: rgb(0.6, 0.75, 1) });
             sy = A4H - 158;
+
+            if (selectedStyle) {
+                dt(`Style: ${selectedStyle}`, { sz: 16, col: [0.4, 0.5, 0.9] });
+            }
+            sy -= 10;
 
             // ── Annotation Comments ───────────────────────────────────────
             dt('ANNOTATION COMMENTS', { sz: 24, bold: true, col: [0.12, 0.27, 0.89] });
             drawHRule();
-
             if (annotations.length === 0) {
                 dt('No annotation comments added.', { sz: 18, col: [0.55, 0.55, 0.55] });
             } else {
                 annotations.forEach((ann, i) => {
-                    const commentText = ann.comment || '(no comment)';
-                    const prefix  = isPdf ? `p${ann.pageNumber} · ${i + 1}.  ` : `${i + 1}.  `;
-                    const lines   = wrapText(commentText, IW - 32, 18);
+                    const prefix = isPdf ? `p${ann.pageNumber} · ${i + 1}.  ` : `${i + 1}.  `;
+                    const lines  = wrapText(ann.comment || '(no comment)', IW - 32, 18);
                     dt(`${prefix}${lines[0]}`, { sz: 18 });
-                    for (let l = 1; l < lines.length; l++) {
-                        dt(lines[l], { sz: 18, indent: 32 });
-                    }
-                    sy -= 6;
+                    for (let l = 1; l < lines.length; l++) dt(lines[l], { sz: 18, indent: 32 });
+                    sy -= 4;
                 });
             }
-
             sy -= 20;
 
-            // ── Brand Test Results (only for image reviews) ───────────────
-            if (!isPdf) {
+            // ── Brand Test Results (all test cases, every style) ──────────
+            if (!isPdf && selectedStyle) {
                 dt('BRAND TEST RESULTS', { sz: 24, bold: true, col: [0.12, 0.27, 0.89] });
                 drawHRule();
 
-                const resultRows: { label: string; result: CommittedTestResult | null }[] = [
-                    { label: 'Logo Placement', result: savedLogoResult },
-                    { label: 'Window Motif',   result: savedMotifResult },
-                    { label: 'Image Size',     result: savedSizeResult  },
-                ];
-
-                for (const row of resultRows) {
+                const allTestRows = buildAllTestResults();
+                for (const row of allTestRows) {
                     if (!row.result) {
-                        dt(`${row.label}:  Not Tested`, { sz: 20, col: [0.55, 0.55, 0.55] });
-                    } else if (row.result.result === 'ok') {
-                        dt(`${row.label}:  OK`, { sz: 20, bold: true, col: [0.07, 0.52, 0.2] });
+                        dt(`${row.label}:  Not Tested`, { sz: 18, col: [0.55, 0.55, 0.55] });
                     } else {
-                        dt(`${row.label}:  NOT OK`, { sz: 20, bold: true, col: [0.78, 0.1, 0.1] });
+                        if (row.result.result === 'ok') {
+                            dt(`${row.label}:  YES / OK`, { sz: 18, bold: true, col: [0.07, 0.52, 0.2] });
+                        } else {
+                            dt(`${row.label}:  NO / NOT OK`, { sz: 18, bold: true, col: [0.78, 0.1, 0.1] });
+                        }
                         if (row.result.comment) {
-                            const lines = wrapText(row.result.comment, IW - 50, 17);
-                            for (const line of lines) {
-                                dt(line, { sz: 17, indent: 32, col: [0.48, 0.08, 0.08] });
-                            }
+                            const lines = wrapText(row.result.comment, IW - 50, 16);
+                            for (const line of lines) dt(line, { sz: 16, indent: 32, col: [0.48, 0.08, 0.08] });
                         }
                     }
-                    sy -= 8;
+                    sy -= 4;
                 }
             }
 
-            // ── Step 3: Save ───────────────────────────────────────────────
-            const pdfBytes = await pdfDoc.save();
+            const pdfBytes = await pdfDocLib.save();
             const blob = new Blob([pdfBytes], { type: 'application/pdf' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
@@ -496,7 +578,7 @@ export default function ReviewPage() {
         }
     };
 
-    // ── Build mailto body with test results ──────────────────────────────────
+    // ── Email body ────────────────────────────────────────────────────────────
     const buildMailtoBody = () => {
         const annotationLines = annotations.length > 0
             ? annotations.map((ann, i) => {
@@ -505,48 +587,34 @@ export default function ReviewPage() {
               })
             : ['  (none)'];
 
-        const resultRows: { label: string; result: CommittedTestResult | null }[] = [
-            { label: 'Logo Placement', result: savedLogoResult },
-            { label: 'Window Motif',   result: savedMotifResult },
-            { label: 'Image Size',     result: savedSizeResult  },
-        ];
-
-        const testLines = resultRows.map(({ label, result }) => {
-            if (!result)                       return `  ${label}: Not Tested`;
-            if (result.result === 'ok')        return `  ${label}: OK`;
-            const c = result.comment ? ` -- ${result.comment}` : '';
-            return `  ${label}: NOT OK${c}`;
-        });
+        const testLines = (!isPdf && selectedStyle)
+            ? buildAllTestResults().map(({ label, result }) => {
+                if (!result) return `  ${label}: Not Tested`;
+                const status = result.result === 'ok' ? 'YES / OK' : 'NO / NOT OK';
+                const c = result.comment ? ` -- ${result.comment}` : '';
+                return `  ${label}: ${status}${c}`;
+            })
+            : [];
 
         const bodyLines = [
             `Brand Review Report: ${review?.title ?? 'Untitled'}`,
             `Job: ${review?.job_id ?? '-'} | Designer: ${review?.designer_name ?? '-'}`,
+            selectedStyle ? `Style: ${selectedStyle}` : '',
             '',
             '--- ANNOTATION COMMENTS ---',
             ...annotationLines,
-            ...(!isPdf ? ['', '--- BRAND TEST RESULTS ---', ...testLines] : []),
-        ];
+            ...(!isPdf && selectedStyle ? ['', '--- BRAND TEST RESULTS ---', ...testLines] : []),
+        ].filter(l => l !== undefined);
 
         return encodeURIComponent(bodyLines.join('\n'));
     };
 
-    const handleSavePdfAndSend = async () => {
-        await handleSaveAsPdf();
+    const handleSendToDesigner = () => {
         if (!review) return;
         const subject = encodeURIComponent(`Brand Review: ${review.title}`);
         const body = buildMailtoBody();
         window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
     };
-
-    // ── Logo sizing (SVG aspect 2.514:1) ─────────────────────────────────────
-    const scaledW = LOGO_BASE_W * logoOverlay.scale;
-    const scaledH = Math.round(scaledW / LOGO_ASPECT);
-
-    // Window Motif Sizing
-    const motifH = logoOverlay.windowRatio === '7:10' ? scaledW * (10/7) : scaledW * (7/10);
-
-    // The image src to display — either the blob url for images, or the rendered page data URL for PDFs
-    const displaySrc = isPdf ? pageImageUrl : review?.fileBlobUrl;
 
     // ── Guards ────────────────────────────────────────────────────────────────
     if (loading) return <div className="flex items-center justify-center h-screen"><i className="pi pi-spin pi-spinner text-4xl text-brand-600" /></div>;
@@ -559,8 +627,10 @@ export default function ReviewPage() {
 
     return (
         <div className="flex h-[calc(100vh-57px)]">
-            {/* ── Main Viewer ───────────────────────────────────────────────── */}
-            <div className="flex-1 relative bg-surface-100 overflow-auto p-6 flex flex-col items-center">
+            <Toast ref={toastRef} />
+
+            {/* ── LEFT COLUMN: Image/PDF viewer (50%) ───────────────────────── */}
+            <div className="flex-1 relative bg-surface-100 overflow-auto p-6 flex flex-col items-center" style={{ minWidth: 0 }}>
                 <div
                     ref={viewerRef}
                     className="relative inline-block bg-white shadow-card select-none"
@@ -578,32 +648,17 @@ export default function ReviewPage() {
                     )}
 
                     {displaySrc
-                        ? <img
-                            src={displaySrc}
-                            alt="Review"
-                            className="max-w-full h-auto select-none pointer-events-none"
-                            onLoad={(e) => {
-                                const img = e.currentTarget as HTMLImageElement;
-                                if (!isPdf) setImageDimensions({ w: img.naturalWidth, h: img.naturalHeight });
-                            }}
-                          />
+                        ? <img src={displaySrc} alt="Review" className="max-w-full h-auto select-none pointer-events-none"
+                            onLoad={(e) => { const img = e.currentTarget as HTMLImageElement; if (!isPdf) setImageDimensions({ w: img.naturalWidth, h: img.naturalHeight }); }} />
                         : <div className="p-8 text-danger">{isPdf ? 'Rendering page…' : 'File not available'}</div>
                     }
 
                     {/* Annotation overlays */}
                     <div className="absolute inset-0 pointer-events-none overflow-hidden">
                         {visibleAnnotations.map((ann) => (
-                            <div
-                                key={ann.id}
-                                onClick={(e) => handleAnnotationClick(e, ann)}
+                            <div key={ann.id} onClick={(e) => handleAnnotationClick(e, ann)}
                                 className="absolute border-2 cursor-pointer pointer-events-auto group transition-all"
-                                style={{
-                                    left: `${ann.x}%`, top: `${ann.y}%`,
-                                    width: `${ann.width}%`, height: `${ann.height}%`,
-                                    borderColor: HIGHLIGHT_COLOR,
-                                    backgroundColor: `${HIGHLIGHT_COLOR}22`,
-                                    borderRadius: 4,
-                                }}
+                                style={{ left: `${ann.x}%`, top: `${ann.y}%`, width: `${ann.width}%`, height: `${ann.height}%`, borderColor: HIGHLIGHT_COLOR, backgroundColor: `${HIGHLIGHT_COLOR}22`, borderRadius: 4 }}
                             >
                                 <div className="absolute -top-2 -left-2 w-5 h-5 flex items-center justify-center text-white text-[10px] font-bold rounded-full shadow-sm bg-surface-900">
                                     {visibleAnnotations.indexOf(ann) + 1}
@@ -616,149 +671,114 @@ export default function ReviewPage() {
                                 </div>
                             </div>
                         ))}
-
                         {currentRect && (
-                            <div className="absolute border-2 border-brand-500 bg-brand-500/20" style={{
-                                left: `${currentRect.x}%`, top: `${currentRect.y}%`,
-                                width: `${currentRect.w}%`, height: `${currentRect.h}%`,
-                                borderRadius: 4,
-                            }} />
+                            <div className="absolute border-2 border-brand-500 bg-brand-500/20" style={{ left: `${currentRect.x}%`, top: `${currentRect.y}%`, width: `${currentRect.w}%`, height: `${currentRect.h}%`, borderRadius: 4 }} />
                         )}
                     </div>
 
-                    {/* ── Logo Overlays (image-only) ──────────────────── */}
-                    {!isPdf && logoOverlay.activeTest !== null && !logoHiddenForCapture && (() => {
+                    {/* ── Logo / Motif Overlays (draggable) ─────────────────── */}
+                    {!isPdf && (logoOverlay.activeTest === 'logo' || logoOverlay.activeTest === 'window_motif') && !logoHiddenForCapture && (() => {
                         if (logoOverlay.activeTest === 'logo') {
                             return (
-                                <div
-                                    onMouseDown={handleLogoDragStart}
-                                    style={{
-                                        position: 'absolute',
-                                        left: logoOverlay.pos.x,
-                                        top: logoOverlay.pos.y,
-                                        cursor: 'grab',
-                                        userSelect: 'none',
-                                        zIndex: 40,
-                                        width: scaledW,
-                                        pointerEvents: 'auto',
-                                        opacity: logoOverlay.opacity ?? 1,
-                                    }}
-                                >
-                                    {/* Top logo — horizontal */}
-                                    <img src={logoSrc} alt="Logo top" draggable={false}
-                                        style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }}
-                                    />
-
-                                    {/* Left logo — takes exactly one logo space vertically */}
+                                <div onMouseDown={handleLogoDragStart} style={{ position: 'absolute', left: logoOverlay.pos.x, top: logoOverlay.pos.y, cursor: 'grab', userSelect: 'none', zIndex: 40, width: scaledW, pointerEvents: 'auto', opacity: logoOverlay.opacity ?? 1 }}>
+                                    <img src={logoSrc} alt="Logo top" draggable={false} style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }} />
                                     <div style={{ width: scaledW, height: scaledH, position: 'relative' }}>
-                                        <img src={logoSrc} alt="Logo left" draggable={false}
-                                            style={{
-                                                position: 'absolute',
-                                                width: scaledW,
-                                                height: scaledH,
-                                                objectFit: 'contain',
-                                                display: 'block',
-                                                transform: 'rotate(90deg)',
-                                                transformOrigin: 'center center',
-                                                left: -(scaledW - scaledH) / 2,
-                                                top: (scaledW / 2) - (1.5 * scaledH),
-                                            }}
-                                        />
+                                        <img src={logoSrc} alt="Logo left" draggable={false} style={{ position: 'absolute', width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', transform: 'rotate(90deg)', transformOrigin: 'center center', left: -(scaledW - scaledH) / 2, top: (scaledW / 2) - (1.5 * scaledH) }} />
                                     </div>
-
-                                    {/* Bottom logo — horizontal */}
-                                    <img src={logoSrc} alt="Logo bottom" draggable={false}
-                                        style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }}
-                                    />
-
-                                    {/* Drag hint */}
-                                    <div style={{
-                                        fontSize: 9, color: '#1e49e2', whiteSpace: 'nowrap',
-                                        background: 'rgba(255,255,255,0.85)', padding: '1px 5px',
-                                        borderRadius: 3, border: '1px solid #99acd4', marginTop: 2,
-                                    }}>✥ drag to move</div>
+                                    <img src={logoSrc} alt="Logo bottom" draggable={false} style={{ width: scaledW, height: scaledH, objectFit: 'contain', display: 'block', marginLeft: scaledH }} />
+                                    <div style={{ fontSize: 9, color: '#1e49e2', whiteSpace: 'nowrap', background: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 3, border: '1px solid #99acd4', marginTop: 2 }}>✥ drag to move</div>
                                 </div>
                             );
-                        } else if (logoOverlay.activeTest === 'window_motif') {
+                        } else {
                             return (
-                                <div
-                                    onMouseDown={handleLogoDragStart}
-                                    style={{
-                                        position: 'absolute',
-                                        left: logoOverlay.pos.x,
-                                        top: logoOverlay.pos.y,
-                                        cursor: 'grab',
-                                        userSelect: 'none',
-                                        zIndex: 40,
-                                        width: scaledW,
-                                        height: motifH,
-                                        pointerEvents: 'auto',
-                                        opacity: logoOverlay.opacity ?? 1,
-                                        border: '2px solid #1e49e2',
-                                        backgroundColor: 'rgba(30, 73, 226, 0.15)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                    }}
-                                >
-                                    <div style={{
-                                        position: 'absolute',
-                                        bottom: -20,
-                                        left: 0,
-                                        fontSize: 9, color: '#1e49e2', whiteSpace: 'nowrap',
-                                        background: 'rgba(255,255,255,0.85)', padding: '1px 5px',
-                                        borderRadius: 3, border: '1px solid #99acd4'
-                                    }}>✥ drag to move</div>
+                                <div onMouseDown={handleLogoDragStart} style={{ position: 'absolute', left: logoOverlay.pos.x, top: logoOverlay.pos.y, cursor: 'grab', userSelect: 'none', zIndex: 40, width: scaledW, height: motifH, pointerEvents: 'auto', opacity: logoOverlay.opacity ?? 1, border: '2px solid #1e49e2', backgroundColor: 'rgba(30, 73, 226, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <div style={{ position: 'absolute', bottom: -20, left: 0, fontSize: 9, color: '#1e49e2', whiteSpace: 'nowrap', background: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 3, border: '1px solid #99acd4' }}>✥ drag to move</div>
                                 </div>
                             );
                         }
-                        return null;
                     })()}
+
+                    {/* ── Typography Overlay ─────────────────────────────────── */}
+                    {!isPdf && logoOverlay.activeTest === 'typography' && !logoHiddenForCapture && (
+                        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 40, opacity: logoOverlay.opacity ?? 1 }}>
+                            {/* Title — "Condensed bold" */}
+                            <div style={{
+                                position: 'absolute',
+                                left: logoSpace,
+                                top: TYPOGRAPHY_TITLE_FROM_TOP,
+                                fontFamily: TYPOGRAPHY_TITLE_FONT_FAMILY,
+                                fontSize: TYPOGRAPHY_TITLE_FONT_SIZE,
+                                fontWeight: TYPOGRAPHY_TITLE_FONT_WEIGHT,
+                                color: TYPOGRAPHY_COLOR,
+                                whiteSpace: 'nowrap',
+                                lineHeight: 1.2,
+                                textShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                            }}>
+                                {TYPOGRAPHY_TITLE_TEXT}
+                            </div>
+                            {/* Subtitle — "Arial regular" — one logo space below title */}
+                            <div style={{
+                                position: 'absolute',
+                                left: logoSpace,
+                                top: TYPOGRAPHY_TITLE_FROM_TOP + TYPOGRAPHY_TITLE_FONT_SIZE + logoSpace,
+                                fontFamily: TYPOGRAPHY_SUBTITLE_FONT_FAMILY,
+                                fontSize: TYPOGRAPHY_SUBTITLE_FONT_SIZE,
+                                fontWeight: TYPOGRAPHY_SUBTITLE_FONT_WEIGHT,
+                                color: TYPOGRAPHY_COLOR,
+                                whiteSpace: 'nowrap',
+                                lineHeight: 1.4,
+                                textShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                            }}>
+                                {TYPOGRAPHY_SUBTITLE_TEXT}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Text Clear Space Overlay — single dashed rectangle bordering the image ── */}
+                    {!isPdf && logoOverlay.activeTest === 'text_clear_space' && !logoHiddenForCapture && (
+                        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 40, opacity: logoOverlay.opacity ?? 1 }}>
+                            {/* Dashed rectangle that borders/frames the image at the logo-space margin */}
+                            <div style={{
+                                position: 'absolute',
+                                top: textClearMargin,
+                                bottom: textClearMargin,
+                                left: textClearMargin,
+                                right: textClearMargin,
+                                border: `2px dashed ${TYPOGRAPHY_COLOR}`,
+                                borderRadius: 2,
+                                boxSizing: 'border-box',
+                            }}>
+                                {/* Label in top-left corner of the rectangle */}
+                                <div style={{ position: 'absolute', left: 6, top: 6, fontSize: 9, color: TYPOGRAPHY_COLOR, background: 'rgba(255,255,255,0.9)', padding: '1px 6px', borderRadius: 3, border: `1px solid ${TYPOGRAPHY_COLOR}`, whiteSpace: 'nowrap', fontWeight: 600 }}>
+                                    Clear space · {Math.round(textClearMargin)}px from edge
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* ── PDF Pagination Bar ─────────────────────────────────────── */}
+                {/* PDF Pagination Bar */}
                 {isPdf && (
                     <div className="mt-4 flex items-center gap-2 bg-white rounded-xl shadow-card border border-surface-200 px-4 py-2.5">
-                        {/* Prev button */}
-                        <button
-                            onClick={() => goToPage(currentPage - 1)}
-                            disabled={currentPage <= 1 || pageRendering}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium text-surface-600 hover:bg-surface-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
+                        <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1 || pageRendering}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium text-surface-600 hover:bg-surface-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                             <ChevronLeft size={16} /> Prev
                         </button>
-
                         <div className="w-px h-5 bg-surface-200 mx-1" />
-
-                        {/* Page input + total */}
                         <div className="flex items-center gap-1.5 text-sm text-surface-600">
                             <span className="text-surface-400 text-xs">Page</span>
-                            <input
-                                type="number"
-                                min={1}
-                                max={totalPages}
-                                value={jumpInput}
-                                onChange={handleJumpInputChange}
-                                onBlur={handleJumpCommit}
+                            <input type="number" min={1} max={totalPages} value={jumpInput}
+                                onChange={handleJumpInputChange} onBlur={handleJumpCommit}
                                 onKeyDown={e => { if (e.key === 'Enter') handleJumpCommit(); }}
-                                className="w-12 text-center border border-surface-300 rounded-lg py-1 text-sm font-semibold text-surface-800 focus:ring-2 focus:ring-brand-500 outline-none"
-                            />
+                                className="w-12 text-center border border-surface-300 rounded-lg py-1 text-sm font-semibold text-surface-800 focus:ring-2 focus:ring-brand-500 outline-none" />
                             <span className="text-surface-400 text-xs">of</span>
                             <span className="font-semibold text-surface-700">{totalPages}</span>
                         </div>
-
                         <div className="w-px h-5 bg-surface-200 mx-1" />
-
-                        {/* Next button */}
-                        <button
-                            onClick={() => goToPage(currentPage + 1)}
-                            disabled={currentPage >= totalPages || pageRendering}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium text-surface-600 hover:bg-surface-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
+                        <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages || pageRendering}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium text-surface-600 hover:bg-surface-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                             Next <ChevronRight size={16} />
                         </button>
-
-                        {/* Page indicator pill */}
                         <div className="ml-2 px-2.5 py-0.5 bg-brand-50 border border-brand-200 rounded-full text-[11px] font-semibold text-brand-700">
                             {annotations.filter(a => a.pageNumber === currentPage).length} annotation{annotations.filter(a => a.pageNumber === currentPage).length !== 1 ? 's' : ''} on this page
                         </div>
@@ -766,8 +786,43 @@ export default function ReviewPage() {
                 )}
             </div>
 
-            {/* ── Right Sidebar ─────────────────────────────────────────────── */}
-            <div className="w-80 bg-white border-l border-surface-200 flex flex-col h-full shadow-lg overflow-y-auto">
+            {/* ── CENTER COLUMN: Style sample reference (20%) ────────────────── */}
+            <div className="w-[20%] min-w-[160px] max-w-[240px] bg-surface-50 border-l border-surface-200 flex flex-col items-center justify-start p-3 overflow-hidden">
+                {selectedStyle && STYLE_SAMPLE_IMAGES[selectedStyle] ? (
+                    <div className="w-full">
+                        <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-2 text-center">Style Reference</p>
+                        <p className="text-[9px] text-surface-400 text-center mb-3 leading-relaxed">Click to enlarge</p>
+                        <div className="flex justify-center">
+                            <img
+                                src={STYLE_SAMPLE_IMAGES[selectedStyle]}
+                                alt={`Style reference ${selectedStyle}`}
+                                onClick={() => setStyleModalOpen(true)}
+                                className="w-full rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 hover:shadow-lg transition-all duration-200"
+                            />
+                        </div>
+                        <p className="text-[9px] text-surface-400 text-center mt-3 font-medium leading-snug">
+                            {(() => {
+                                const styleLabels: Record<StyleOption, string> = {
+                                    'style1.1': 'Human', 'style1.2': 'Object', 'style2': 'Only text - no image',
+                                    'style3.1': 'Action oriented', 'style3.2': 'Architectural/Abstract',
+                                    'style4': 'Action + gradient', 'style5': 'Abstract w/o gradient',
+                                };
+                                return styleLabels[selectedStyle] ?? selectedStyle;
+                            })()}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-center opacity-40">
+                        <div className="w-12 h-12 rounded-full bg-surface-200 flex items-center justify-center mb-3">
+                            <Square size={20} className="text-surface-400" />
+                        </div>
+                        <p className="text-[10px] text-surface-400 font-medium leading-relaxed">Select a style<br/>to see reference</p>
+                    </div>
+                )}
+            </div>
+
+            {/* ── RIGHT SIDEBAR: Editor + Brand Checklist (30%) ─────────────── */}
+            <div className="w-[30%] min-w-[280px] max-w-[360px] bg-white border-l border-surface-200 flex flex-col h-full shadow-lg overflow-y-auto">
                 {/* Header */}
                 <div className="p-4 border-b border-surface-100 bg-surface-50 flex-shrink-0">
                     <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-sm text-surface-500 hover:text-surface-700 mb-2">
@@ -845,29 +900,42 @@ export default function ReviewPage() {
                     onSaveLogoResult={setSavedLogoResult}
                     onSaveMotifResult={setSavedMotifResult}
                     onSaveSizeResult={setSavedSizeResult}
+                    onSaveTypographyResult={setSavedTypographyResult}
+                    onSaveTextClearResult={setSavedTextClearResult}
+                    onSaveSimpleTests={setSavedSimpleTests}
                     imageDimensions={imageDimensions}
                     logoSrc={logoSrc}
                     onLogoSrcChange={setLogoSrc}
+                    onStyleChange={setSelectedStyle}
+                    onPlatformChange={setPlatform}
                     isPdf={isPdf}
+                    initialPlatform={review?.platform as Platform | undefined}
+                    initialStyle={review?.style as StyleOption | undefined}
+                    initialLogoResult={review?.savedLogoResult}
+                    initialMotifResult={review?.savedMotifResult}
+                    initialSizeResult={review?.savedSizeResult}
+                    initialTypographyResult={review?.savedTypographyResult}
+                    initialTextClearResult={review?.savedTextClearResult}
+                    initialSimpleTests={review?.savedSimpleTests}
                 />
 
                 {/* Actions */}
                 <div className="p-4 border-t border-surface-200 space-y-2 flex-shrink-0 mt-auto">
-                    {/* Reset button */}
-                    <button
-                        onClick={handleResetAll}
-                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
-                    >
+                    <button onClick={handleResetAll}
+                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors">
                         <RotateCcw size={14} /> Reset All
                     </button>
-                    <button onClick={handleSaveAnnotations} className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium border border-surface-300 rounded-lg hover:bg-surface-50 transition-colors">
-                        <Save size={16} /> Save Annotations
+                    <button onClick={handleSaveAndComplete}
+                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
+                        <Save size={16} /> Save and Mark Complete
                     </button>
-                    <button onClick={handleSaveAsPdf} className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
+                    <button onClick={handleSaveAsPdf}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold border border-brand-600 text-brand-600 rounded-lg hover:bg-brand-50 transition-colors">
                         <FileDown size={16} /> Save as PDF
                     </button>
-                    <button onClick={handleSavePdfAndSend} className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-indigo-700 text-white rounded-lg hover:bg-indigo-800 transition-colors">
-                        <Send size={15} /> Save PDF &amp; Send to Designer
+                    <button onClick={handleSendToDesigner}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-indigo-700 text-white rounded-lg hover:bg-indigo-800 transition-colors">
+                        <Send size={15} /> Send to Designer
                     </button>
                 </div>
             </div>
@@ -877,7 +945,6 @@ export default function ReviewPage() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ pointerEvents: 'none' }}>
                     <div className="absolute inset-0 bg-black/20" style={{ pointerEvents: 'auto' }} onClick={closeCommentModal} />
                     <div className="relative bg-white rounded-xl shadow-2xl border border-surface-200 p-5 w-[360px] animate-fade-in" style={{ pointerEvents: 'auto' }}>
-                        {/* Modal header */}
                         <div className="flex items-center gap-2 mb-3">
                             <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0" style={{ backgroundColor: '#1e49e2' }}>
                                 {editingId ? '✎' : '+'}
@@ -886,32 +953,72 @@ export default function ReviewPage() {
                                 {editingId ? 'Edit Comment' : `Add Comment${isPdf ? ` — Page ${currentPage}` : ''}`}
                             </h3>
                         </div>
-
-                        {/* Textarea */}
                         <div className="relative">
                             <textarea
-                                value={comment}
-                                onChange={e => setComment(e.target.value)}
+                                value={comment} onChange={e => setComment(e.target.value)}
                                 className="w-full h-28 p-2.5 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none resize-none pr-[72px]"
-                                placeholder="Describe the issue…"
-                                autoFocus
+                                placeholder="Describe the issue…" autoFocus
                                 onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCommentSave(); }}
                             />
-                            {/* Inline Save button inside textarea */}
-                            <button
-                                onClick={handleCommentSave}
-                                disabled={!comment.trim()}
+                            <button onClick={handleCommentSave} disabled={!comment.trim()}
                                 className="absolute bottom-2 right-2 flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-white rounded-md transition-colors disabled:opacity-40"
-                                style={{ backgroundColor: comment.trim() ? '#1e49e2' : undefined }}
-                                title="Save comment (Ctrl+Enter)"
-                            >
+                                style={{ backgroundColor: comment.trim() ? '#1e49e2' : undefined }} title="Save comment (Ctrl+Enter)">
                                 <Save size={11} /> {editingId ? 'Update' : 'Save'}
                             </button>
                         </div>
-
                         <div className="flex items-center justify-between mt-2">
                             <p className="text-[10px] text-surface-400">Ctrl+Enter to save quickly</p>
                             <button onClick={closeCommentModal} className="text-xs text-surface-500 hover:text-surface-700 font-medium">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Style Reference Modal ──────────────────────────────────────── */}
+            {styleModalOpen && selectedStyle && STYLE_SAMPLE_IMAGES[selectedStyle] && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-center justify-center p-6"
+                    onClick={() => setStyleModalOpen(false)}
+                >
+                    {/* Backdrop */}
+                    <div className="absolute inset-0 bg-black/75" style={{ backdropFilter: 'blur(4px)' }} />
+                    {/* Modal card */}
+                    <div
+                        className="relative z-10 max-w-3xl w-full rounded-2xl overflow-hidden shadow-2xl"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header bar */}
+                        <div className="flex items-center justify-between px-5 py-3 bg-surface-900">
+                            <div>
+                                <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">Style Reference</p>
+                                <p className="text-sm font-bold text-white">
+                                    {{
+                                        'style1.1': 'Style 1.1 — Human',
+                                        'style1.2': 'Style 1.2 — Object',
+                                        'style2':   'Style 2 — Only text',
+                                        'style3.1': 'Style 3.1 — Action oriented',
+                                        'style3.2': 'Style 3.2 — Architectural / Abstract',
+                                        'style4':   'Style 4 — Action + gradient',
+                                        'style5':   'Style 5 — Abstract without gradient',
+                                    }[selectedStyle] ?? selectedStyle}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setStyleModalOpen(false)}
+                                className="p-2 rounded-full text-surface-400 hover:text-white hover:bg-surface-700 transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        {/* Image */}
+                        <img
+                            src={STYLE_SAMPLE_IMAGES[selectedStyle]}
+                            alt={`Style reference ${selectedStyle}`}
+                            className="w-full block"
+                            style={{ maxHeight: '70vh', objectFit: 'contain', background: '#111' }}
+                        />
+                        <div className="py-2 px-5 bg-surface-900 text-center">
+                            <p className="text-[11px] text-surface-500">Click anywhere outside to close</p>
                         </div>
                     </div>
                 </div>
