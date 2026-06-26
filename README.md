@@ -104,12 +104,12 @@ Distribute the `dist/index.html` file to anyone. They can double-click it to ope
 
 ## How to Use
 
-1. **New Review** — Click `+ New Review`, upload a PNG/JPG or PDF, fill in the file name, job ID, designer name and email, then click **Start Review**
+1. **New Review** — Click `+ New Review`, upload a PNG/JPG or PDF, fill in the details, and click **Start Review**. For PDFs, use the **Reference Pages** accordion to track Insights, Hub, Contact, Infographics, and Video banners.
 2. **Annotate** — Draw rectangles on the image or PDF page; add a comment in the modal that appears
 3. **Brand Checklist** *(images only)* — Select the target platform, check image dimensions, run logo and motif overlay tests, save each result
 4. **PDF Navigation** — For PDF uploads, use the pagination bar below the viewer to navigate pages and annotate per page
 5. **Persist & Complete** — Click **Save & Mark Complete** to calculate the test score, save the progress, and move the file to the Completed dashboard
-6. **Export** — Click **Save PDF** to download the annotated report, or **Send to Designer** to email the designer
+6. **Export** — Use **Save PDF** or **Send to Designer** from a review. In the Dashboard, click **Export CSV** to download a detailed report of all completed reviews, including individual brand test scores.
 7. **Resume / Backup** — Open the app later and **Load JSON** to restore your workspace (merge or replace existing data), or use **Download JSON** to backup
 
 ---

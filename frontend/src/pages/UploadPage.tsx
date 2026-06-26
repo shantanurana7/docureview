@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { addReview, fileToBase64 } from '../services/localStore';
 import { Review } from '../types';
+import { Accordion, AccordionTab } from 'primereact/accordion';
 import { Upload, Image, FileText, Play } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -265,6 +266,55 @@ export default function UploadPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* PDF Reference Accordion */}
+                {fileType === 'pdf' && (
+                    <div className="p-6 border-t border-surface-100">
+                        <h3 className="text-sm font-semibold text-surface-700 mb-4">Reference Pages</h3>
+                        <Accordion multiple className="text-sm">
+                            <AccordionTab header="Insights led page">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center">Dummy text data for Insights led page content goes here.</p>
+                                    <div className="w-full max-w-md h-48 bg-surface-50 border-2 border-dashed border-surface-300 rounded-xl flex items-center justify-center text-surface-400">
+                                        Space for reference image
+                                    </div>
+                                </div>
+                            </AccordionTab>
+                            <AccordionTab header="Hub page">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center">Dummy text data for Hub page content goes here.</p>
+                                    <div className="w-full max-w-md h-48 bg-surface-50 border-2 border-dashed border-surface-300 rounded-xl flex items-center justify-center text-surface-400">
+                                        Space for reference image
+                                    </div>
+                                </div>
+                            </AccordionTab>
+                            <AccordionTab header="Contact page">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center">Dummy text data for Contact page content goes here.</p>
+                                    <div className="w-full max-w-md h-48 bg-surface-50 border-2 border-dashed border-surface-300 rounded-xl flex items-center justify-center text-surface-400">
+                                        Space for reference image
+                                    </div>
+                                </div>
+                            </AccordionTab>
+                            <AccordionTab header="Infographics">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center">Dummy text data for Infographics content goes here.</p>
+                                    <div className="w-full max-w-md h-48 bg-surface-50 border-2 border-dashed border-surface-300 rounded-xl flex items-center justify-center text-surface-400">
+                                        Space for reference image
+                                    </div>
+                                </div>
+                            </AccordionTab>
+                            <AccordionTab header="Video banners">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center">Dummy text data for Video banners content goes here.</p>
+                                    <div className="w-full max-w-md h-48 bg-surface-50 border-2 border-dashed border-surface-300 rounded-xl flex items-center justify-center text-surface-400">
+                                        Space for reference image
+                                    </div>
+                                </div>
+                            </AccordionTab>
+                        </Accordion>
+                    </div>
+                )}
 
                 {/* Actions */}
                 <div className="p-6 border-t border-surface-100 bg-surface-50 flex justify-end">

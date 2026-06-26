@@ -63,6 +63,22 @@ export default function ReviewerDashboard() {
             'Test Score': r.testScore || 'N/A',
             'Annotations Count': r.annotations?.length || 0,
             'Date': r.created_at,
+            'Logo Test': r.savedLogoResult?.result || 'N/A',
+            'Motif Test': r.savedMotifResult?.result || 'N/A',
+            'Size Test': r.savedSizeResult?.result || 'N/A',
+            'Typography Test': r.savedTypographyResult?.result || 'N/A',
+            'Text Clear Test': r.savedTextClearResult?.result || 'N/A',
+            'Gradient Test': r.savedSimpleTests?.gradient?.result || 'N/A',
+            'Portraits Test': r.savedSimpleTests?.portraits?.result || 'N/A',
+            'Diversity Test': r.savedSimpleTests?.diversity?.result || 'N/A',
+            'Body Copy Arial Test': r.savedSimpleTests?.body_copy_arial?.result || 'N/A',
+            'Copyright Test': r.savedSimpleTests?.copyright?.result || 'N/A',
+            'Colors Test': r.savedSimpleTests?.colors?.result || 'N/A',
+            'Window BG Colors Test': r.savedSimpleTests?.window_bg_colors?.result || 'N/A',
+            'Type in Window Test': r.savedSimpleTests?.type_in_window?.result || 'N/A',
+            'BG 3 Colors Test': r.savedSimpleTests?.bg_3_colors?.result || 'N/A',
+            'Image Breakout Test': r.savedSimpleTests?.image_breakout?.result || 'N/A',
+            'Neutral Image Test': r.savedSimpleTests?.neutral_image?.result || 'N/A',
         }));
         const csv = Papa.unparse(data);
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
