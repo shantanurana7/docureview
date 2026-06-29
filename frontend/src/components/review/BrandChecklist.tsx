@@ -17,13 +17,13 @@ const PLATFORM_OPTIONS: { label: string; value: Platform }[] = [
 
 // ── Style Options with updated descriptions and sample image paths ─────────────
 const STYLE_OPTIONS: { label: string; value: StyleOption; desc: string; sample: string }[] = [
-    { label: 'Style 1.1', value: 'style1.1', desc: 'Human',                                         sample: '/sample-1.jpg' },
-    { label: 'Style 1.2', value: 'style1.2', desc: 'Object',                                        sample: '/sample-2.jpg' },
-    { label: 'Style 2',   value: 'style2',   desc: 'Only text - no image',                          sample: '/sample-3.jpg' },
-    { label: 'Style 3.1', value: 'style3.1', desc: 'Action oriented support imagery',               sample: '/sample-4.jpg' },
-    { label: 'Style 3.2', value: 'style3.2', desc: 'Architectural/Abstract hero image',             sample: '/sample-5.jpg' },
-    { label: 'Style 4',   value: 'style4',   desc: 'Only action oriented imagery with gradient',    sample: '/sample-6.jpg' },
-    { label: 'Style 5',   value: 'style5',   desc: 'Abstract without gradient',                     sample: '/sample-1.jpg' },
+    { label: 'Style 1.1', value: 'style1.1', desc: 'Human',                                         sample: './assets/sample-1.jpg' },
+    { label: 'Style 1.2', value: 'style1.2', desc: 'Object',                                        sample: './assets/sample-2.jpg' },
+    { label: 'Style 2',   value: 'style2',   desc: 'Only text - no image',                          sample: './assets/sample-3.jpg' },
+    { label: 'Style 3.1', value: 'style3.1', desc: 'Action oriented support imagery',               sample: './assets/sample-4.jpg' },
+    { label: 'Style 3.2', value: 'style3.2', desc: 'Architectural/Abstract hero image',             sample: './assets/sample-5.jpg' },
+    { label: 'Style 4',   value: 'style4',   desc: 'Only action oriented imagery with gradient',    sample: './assets/sample-6.jpg' },
+    { label: 'Style 5',   value: 'style5',   desc: 'Abstract without gradient',                     sample: './assets/sample-1.jpg' },
 ];
 
 // ── Test visibility matrix (Y = true, N = false) ──────────────────────────────
@@ -707,8 +707,8 @@ export default function BrandChecklist({
                                     <div className="flex items-center gap-2">
                                         <span className="text-[10px] text-surface-500 font-medium">Logo colour:</span>
                                         <div className="flex bg-surface-100 p-0.5 rounded-md">
-                                            <button onClick={() => onLogoSrcChange('/KPMG_blue_logo.svg')} className={`px-2 py-0.5 text-[10px] rounded-sm font-medium transition-colors ${logoSrc === '/KPMG_blue_logo.svg' ? 'bg-white text-brand-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'}`}>Blue</button>
-                                            <button onClick={() => onLogoSrcChange('/KPMG_white_logo.svg')} className={`px-2 py-0.5 text-[10px] rounded-sm font-medium transition-colors ${logoSrc === '/KPMG_white_logo.svg' ? 'bg-surface-800 text-white shadow-sm' : 'text-surface-500 hover:text-surface-700'}`}>White</button>
+                                            <button onClick={() => onLogoSrcChange('./assets/KPMG_blue_logo.svg')} className={`px-2 py-0.5 text-[10px] rounded-sm font-medium transition-colors ${logoSrc === './assets/KPMG_blue_logo.svg' ? 'bg-white text-brand-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'}`}>Blue</button>
+                                            <button onClick={() => onLogoSrcChange('./assets/KPMG_white_logo.svg')} className={`px-2 py-0.5 text-[10px] rounded-sm font-medium transition-colors ${logoSrc === './assets/KPMG_white_logo.svg' ? 'bg-surface-800 text-white shadow-sm' : 'text-surface-500 hover:text-surface-700'}`}>White</button>
                                         </div>
                                     </div>
                                     {overlayState.activeTest === 'logo' && (

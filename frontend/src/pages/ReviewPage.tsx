@@ -22,28 +22,28 @@ import {
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
 const HIGHLIGHT_COLOR = '#1e49e2';
-const LOGO_BLUE_SRC = '/KPMG_blue_logo.svg';
+const LOGO_BLUE_SRC = './assets/KPMG_blue_logo.svg';
 // SVG viewBox: 80.58 × 32.08 → aspect ratio ≈ 2.514 : 1
 const LOGO_ASPECT = 80.58 / 32.08; // ≈ 2.514
 const LOGO_BASE_W = 120; // px at scale 1
 
 // ── Style sample image mapping ────────────────────────────────────────────────
 const STYLE_SAMPLE_IMAGES: Partial<Record<StyleOption, string>> = {
-    'style1.1': '/sample-1.jpg',
-    'style1.2': '/sample-2.jpg',
-    'style2':   '/sample-3.jpg',
-    'style3.1': '/sample-4.jpg',
-    'style3.2': '/sample-5.jpg',
-    'style4':   '/sample-6.jpg',
-    'style5':   '/sample-1.jpg',
+    'style1.1': './assets/sample-1.jpg',
+    'style1.2': './assets/sample-2.jpg',
+    'style2':   './assets/sample-3.jpg',
+    'style3.1': './assets/sample-4.jpg',
+    'style3.2': './assets/sample-5.jpg',
+    'style4':   './assets/sample-6.jpg',
+    'style5':   './assets/sample-1.jpg',
 };
 
 const PDF_REF_IMAGES: Record<string, string> = {
-    'Insights led page': '/sample-1.jpg',
-    'Hub page': '/sample-2.jpg',
-    'Contact page': '/sample-3.jpg',
-    'Infographics': '/sample-4.jpg',
-    'Video banners': '/sample-5.jpg',
+    'Insights led page': './assets/sample-1.jpg',
+    'Hub page': './assets/sample-2.jpg',
+    'Contact page': './assets/sample-3.jpg',
+    'Infographics': './assets/sample-4.jpg',
+    'Video banners': './assets/sample-5.jpg',
 };
 
 // ── Simple test human-readable labels (for PDF) ───────────────────────────────

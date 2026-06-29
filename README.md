@@ -92,14 +92,17 @@ The app will be available at `http://localhost:3000` (or the next available port
 
 ## Production Build
 
-The project uses `vite-plugin-singlefile` to bundle everything — JS, CSS, fonts — into a **single `index.html`** file. This makes it fully portable: no server required, runs from `file://` directly.
+The project uses `vite-plugin-singlefile` to bundle all JavaScript and CSS into a **single `index.html`** file, ensuring it can run directly from the `file://` protocol without a local server. Image assets are stored externally in a companion `assets/` folder to keep the HTML lightweight and organized.
 
 ```bash
+# Important: Ensure your images are placed in frontend/public/assets/ before building
 npm run build
-# Output: frontend/dist/index.html
+# Output: 
+# frontend/dist/index.html
+# frontend/dist/assets/ (contains all images and logos)
 ```
 
-Distribute the `dist/index.html` file to anyone. They can double-click it to open it in their browser with no install needed.
+Distribute both the `dist/index.html` file and the `dist/assets/` directory together. Users can double-click `index.html` to open the app directly in their browser with no install or server needed.
 
 ---
 
@@ -147,8 +150,10 @@ docureview/
 │   │   │   └── StoreContext.tsx
 │   │   └── types.ts
 │   ├── public/
-│   │   ├── KPMG_blue_logo.svg
-│   │   └── KPMG_white_logo.svg
+│   │   └── assets/
+│   │       ├── KPMG_blue_logo.svg
+│   │       ├── KPMG_white_logo.svg
+│   │       └── sample-*.jpg
 │   └── package.json
 └── README.md
 ```
