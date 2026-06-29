@@ -61,7 +61,7 @@ export function mergeLoadedData(data: DocuReviewData): void {
 function restoreBlobFromBase64(review: Review): Review {
     if (review.fileBase64 && !review.fileBlobUrl) {
         try {
-            const mimeType = 'image/png';
+            const mimeType = review.fileType === 'pdf' ? 'application/pdf' : 'image/png';
             const binaryStr = atob(review.fileBase64);
             const bytes = new Uint8Array(binaryStr.length);
             for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
@@ -89,15 +89,10 @@ export async function fileToBase64(file: Blob): Promise<string> {
 
 // === Download current data as JSON ===
 export function downloadJson() {
-    // Strip runtime-only blob fields before saving (keep fileBase64 for images only)
+    // Strip runtime-only blob fields before saving. We keep fileBase64 for all files in JSON export.
     const cleaned: DocuReviewData = {
         reviews: store.reviews.map(r => {
             const { fileBlob, fileBlobUrl, ...rest } = r;
-            // Don't persist PDF binary data — too large for JSON download to be useful
-            if (rest.fileType === 'pdf') {
-                const { fileBase64, ...pdfRest } = rest;
-                return pdfRest;
-            }
             return rest;
         }),
     };

@@ -375,25 +375,38 @@ export default function ReviewPage() {
     const handleSaveAsPdf = async () => {
         if (!viewerRef.current || !review) return;
         try {
-            setLogoHiddenForCapture(true);
-            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-            const canvasEl = await html2canvas(viewerRef.current, { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff' });
-            setLogoHiddenForCapture(false);
-
-            const imgDataUrl = canvasEl.toDataURL('image/png');
-            const base64 = imgDataUrl.split(',')[1];
-            const imgBytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-            const canvasW = canvasEl.width; const canvasH = canvasEl.height;
-
-            const pdfDocLib = await PDFDocument.create();
             const { StandardFonts } = await import('pdf-lib');
+            let pdfDocLib: PDFDocument;
+            let imgPage: any = null;
+            let canvasW = 0;
+            let canvasH = 0;
+
+            if (isPdf && review.fileBlobUrl) {
+                const resp = await fetch(review.fileBlobUrl);
+                const arrayBuffer = await resp.arrayBuffer();
+                pdfDocLib = await PDFDocument.load(arrayBuffer);
+            } else {
+                setLogoHiddenForCapture(true);
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+                const canvasEl = await html2canvas(viewerRef.current, { scale: 2, useCORS: true, logging: false, backgroundColor: '#fff' });
+                setLogoHiddenForCapture(false);
+    
+                const imgDataUrl = canvasEl.toDataURL('image/png');
+                const base64 = imgDataUrl.split(',')[1];
+                const imgBytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+                canvasW = canvasEl.width;
+                canvasH = canvasEl.height;
+    
+                pdfDocLib = await PDFDocument.create();
+                
+                // ── Page 1: Annotated image ───────────────────────────────────
+                imgPage = pdfDocLib.addPage([canvasW, canvasH]);
+                const pngImage = await pdfDocLib.embedPng(imgBytes);
+                imgPage.drawImage(pngImage, { x: 0, y: 0, width: canvasW, height: canvasH });
+            }
+
             const regFont  = await pdfDocLib.embedFont(StandardFonts.Helvetica);
             const boldFont = await pdfDocLib.embedFont(StandardFonts.HelveticaBold);
-
-            // ── Page 1: Annotated image ───────────────────────────────────
-            const imgPage = pdfDocLib.addPage([canvasW, canvasH]);
-            const pngImage = await pdfDocLib.embedPng(imgBytes);
-            imgPage.drawImage(pngImage, { x: 0, y: 0, width: canvasW, height: canvasH });
 
             const hexToRgb = (hex: string) => {
                 const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -401,15 +414,33 @@ export default function ReviewPage() {
             };
             const annColor = hexToRgb(HIGHLIGHT_COLOR);
 
-            visibleAnnotations.forEach((ann, i) => {
-                const ax = (ann.x / 100) * canvasW;
-                const aw = (ann.width / 100) * canvasW;
-                const ah = (ann.height / 100) * canvasH;
-                // PDF coordinate system is bottom-up; convert top-down percentage
-                const ay = canvasH - ((ann.y / 100) * canvasH) - ah;
+            const annList = isPdf ? annotations : visibleAnnotations;
 
-                // ── 1. Visual rectangle drawn as PDF vector on page 1 ───────
-                imgPage.drawRectangle({
+            annList.forEach((ann, i) => {
+                let targetPage: any;
+                let pw = canvasW;
+                let ph = canvasH;
+
+                if (isPdf) {
+                    const pageIndex = ann.pageNumber - 1;
+                    if (pageIndex < 0 || pageIndex >= pdfDocLib.getPageCount()) return;
+                    targetPage = pdfDocLib.getPage(pageIndex);
+                    const size = targetPage.getSize();
+                    pw = size.width;
+                    ph = size.height;
+                } else {
+                    if (!imgPage) return;
+                    targetPage = imgPage;
+                }
+
+                const ax = (ann.x / 100) * pw;
+                const aw = (ann.width / 100) * pw;
+                const ah = (ann.height / 100) * ph;
+                // PDF coordinate system is bottom-up; convert top-down percentage
+                const ay = ph - ((ann.y / 100) * ph) - ah;
+
+                // ── 1. Visual rectangle drawn as PDF vector ───────
+                targetPage.drawRectangle({
                     x: ax, y: ay, width: aw, height: ah,
                     borderColor: rgb(annColor.r, annColor.g, annColor.b),
                     borderWidth: 4,
@@ -422,9 +453,9 @@ export default function ReviewPage() {
                 const badgeR = 14;
                 const badgeCx = ax + badgeR + 2;
                 const badgeCy = ay + ah - badgeR - 2;
-                imgPage.drawCircle({ x: badgeCx, y: badgeCy, size: badgeR, color: rgb(0.12, 0.27, 0.89) });
+                targetPage.drawCircle({ x: badgeCx, y: badgeCy, size: badgeR, color: rgb(0.12, 0.27, 0.89) });
                 const numStr = String(i + 1);
-                imgPage.drawText(numStr, {
+                targetPage.drawText(numStr, {
                     x: badgeCx - (numStr.length > 1 ? 7 : 4),
                     y: badgeCy - 5,
                     size: 10, font: boldFont, color: rgb(1, 1, 1),
@@ -443,17 +474,19 @@ export default function ReviewPage() {
                         Open:     false,
                         F:        28, // Print | NoZoom | NoRotate
                         C:        [annColor.r, annColor.g, annColor.b],
-                        P:        imgPage.ref,
+                        P:        targetPage.ref,
                     })
                 );
-                imgPage.node.addAnnot(annotRef);
+                targetPage.node.addAnnot(annotRef);
             });
 
             // Tell Acrobat to generate appearance streams for the annotations
-            const acroForm = pdfDocLib.context.obj({
-                NeedAppearances: true,
-            });
-            pdfDocLib.catalog.set(PDFName.of('AcroForm'), pdfDocLib.context.register(acroForm));
+            if (!pdfDocLib.catalog.get(PDFName.of('AcroForm'))) {
+                const acroForm = pdfDocLib.context.obj({
+                    NeedAppearances: true,
+                });
+                pdfDocLib.catalog.set(PDFName.of('AcroForm'), pdfDocLib.context.register(acroForm));
+            }
 
             // ── 4. Native sticky notes for ALL brand test results (OK and NOT OK) ──
             if (!isPdf && selectedStyle) {
