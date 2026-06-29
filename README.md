@@ -26,6 +26,7 @@ Built for KPMG brand reviewers to annotate images and PDFs, run logo placement a
 - **Pagination bar** below the viewer — Prev / Next buttons + jump-to-page input
 - Annotation count pill shows how many annotations exist on the current page
 - Switching pages updates the annotation overlay automatically
+- **Reference Pages Accordion** — Dedicated side panel for PDF uploads with click-to-enlarge structural references (Insights led page, Hub page, Contact page, Infographics, Video banners)
 
 ### ✅ Brand Checklist *(image reviews only)*
 - **Platform selector** — LinkedIn (1200×700), Twitter (1024×1024), Ecomms (600×400)
@@ -104,8 +105,8 @@ Distribute the `dist/index.html` file to anyone. They can double-click it to ope
 
 ## How to Use
 
-1. **New Review** — Click `+ New Review`, upload a PNG/JPG or PDF, fill in the details, and click **Start Review**. For PDFs, use the **Reference Pages** accordion to track Insights, Hub, Contact, Infographics, and Video banners.
-2. **Annotate** — Draw rectangles on the image or PDF page; add a comment in the modal that appears
+1. **New Review** — Click `+ New Review`, upload a PNG/JPG or PDF, fill in the details, and click **Start Review**.
+2. **Annotate** — Draw rectangles on the image or PDF page; add a comment in the modal that appears. For PDFs, the center column displays an accordion of **Reference Pages** with click-to-enlarge sample references.
 3. **Brand Checklist** *(images only)* — Select the target platform, check image dimensions, run logo and motif overlay tests, save each result
 4. **PDF Navigation** — For PDF uploads, use the pagination bar below the viewer to navigate pages and annotate per page
 5. **Persist & Complete** — Click **Save & Mark Complete** to calculate the test score, save the progress, and move the file to the Completed dashboard

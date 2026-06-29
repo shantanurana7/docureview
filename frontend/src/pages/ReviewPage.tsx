@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { Toast } from 'primereact/toast';
+import { Accordion, AccordionTab } from 'primereact/accordion';
 import { getReviewById, updateAnnotations, updateReview } from '../services/localStore';
 import { Review, Annotation, ShapeType, StyleOption, SimpleTestKey, Platform, CommittedTestResult, SavedSimpleTests } from '../types';
 import { ArrowLeft, Square, Save, FileDown, Trash2, Pencil, Check, X, Info, RotateCcw, Send, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
@@ -35,6 +36,14 @@ const STYLE_SAMPLE_IMAGES: Partial<Record<StyleOption, string>> = {
     'style3.2': '/sample-5.jpg',
     'style4':   '/sample-6.jpg',
     'style5':   '/sample-1.jpg',
+};
+
+const PDF_REF_IMAGES: Record<string, string> = {
+    'Insights led page': '/sample-1.jpg',
+    'Hub page': '/sample-2.jpg',
+    'Contact page': '/sample-3.jpg',
+    'Infographics': '/sample-4.jpg',
+    'Video banners': '/sample-5.jpg',
 };
 
 // ── Simple test human-readable labels (for PDF) ───────────────────────────────
@@ -107,6 +116,10 @@ export default function ReviewPage() {
     const [platform, setPlatform] = useState<Platform | ''>('');
     // Style reference modal
     const [styleModalOpen, setStyleModalOpen] = useState(false);
+
+    // PDF reference modal
+    const [pdfModalOpen, setPdfModalOpen] = useState(false);
+    const [selectedPdfRef, setSelectedPdfRef] = useState<string | null>(null);
 
     // Natural pixel dimensions of the uploaded image
     const [imageDimensions, setImageDimensions] = useState<{ w: number; h: number } | null>(null);
@@ -787,8 +800,84 @@ export default function ReviewPage() {
             </div>
 
             {/* ── CENTER COLUMN: Style sample reference (20%) ────────────────── */}
-            <div className="w-[20%] min-w-[160px] max-w-[240px] bg-surface-50 border-l border-surface-200 flex flex-col items-center justify-start p-3 overflow-hidden">
-                {selectedStyle && STYLE_SAMPLE_IMAGES[selectedStyle] ? (
+            <div className="w-[20%] min-w-[160px] max-w-[240px] bg-surface-50 border-l border-surface-200 flex flex-col items-center justify-start p-3 overflow-y-auto overflow-x-hidden custom-scrollbar">
+                {isPdf ? (
+                    <div className="w-full">
+                        <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-2 text-center">Reference Pages</p>
+                        <Accordion multiple className="text-xs w-full">
+                            <AccordionTab header="Insights led page">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Insights led page content goes here.</p>
+                                    <img 
+                                        src={PDF_REF_IMAGES['Insights led page']} 
+                                        alt="Insights led page reference"
+                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
+                                        onClick={() => {
+                                            setSelectedPdfRef('Insights led page');
+                                            setPdfModalOpen(true);
+                                        }}
+                                    />
+                                </div>
+                            </AccordionTab>
+                            <AccordionTab header="Hub page">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Hub page content goes here.</p>
+                                    <img 
+                                        src={PDF_REF_IMAGES['Hub page']} 
+                                        alt="Hub page reference"
+                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
+                                        onClick={() => {
+                                            setSelectedPdfRef('Hub page');
+                                            setPdfModalOpen(true);
+                                        }}
+                                    />
+                                </div>
+                            </AccordionTab>
+                            <AccordionTab header="Contact page">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Contact page content goes here.</p>
+                                    <img 
+                                        src={PDF_REF_IMAGES['Contact page']} 
+                                        alt="Contact page reference"
+                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
+                                        onClick={() => {
+                                            setSelectedPdfRef('Contact page');
+                                            setPdfModalOpen(true);
+                                        }}
+                                    />
+                                </div>
+                            </AccordionTab>
+                            <AccordionTab header="Infographics">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Infographics content goes here.</p>
+                                    <img 
+                                        src={PDF_REF_IMAGES['Infographics']} 
+                                        alt="Infographics reference"
+                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
+                                        onClick={() => {
+                                            setSelectedPdfRef('Infographics');
+                                            setPdfModalOpen(true);
+                                        }}
+                                    />
+                                </div>
+                            </AccordionTab>
+                            <AccordionTab header="Video banners">
+                                <div className="flex flex-col items-center p-2">
+                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Video banners content goes here.</p>
+                                    <img 
+                                        src={PDF_REF_IMAGES['Video banners']} 
+                                        alt="Video banners reference"
+                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
+                                        onClick={() => {
+                                            setSelectedPdfRef('Video banners');
+                                            setPdfModalOpen(true);
+                                        }}
+                                    />
+                                </div>
+                            </AccordionTab>
+                        </Accordion>
+                    </div>
+                ) : selectedStyle && STYLE_SAMPLE_IMAGES[selectedStyle] ? (
                     <div className="w-full">
                         <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-2 text-center">Style Reference</p>
                         <p className="text-[9px] text-surface-400 text-center mb-3 leading-relaxed">Click to enlarge</p>
@@ -1014,6 +1103,48 @@ export default function ReviewPage() {
                         <img
                             src={STYLE_SAMPLE_IMAGES[selectedStyle]}
                             alt={`Style reference ${selectedStyle}`}
+                            className="w-full block"
+                            style={{ maxHeight: '70vh', objectFit: 'contain', background: '#111' }}
+                        />
+                        <div className="py-2 px-5 bg-surface-900 text-center">
+                            <p className="text-[11px] text-surface-500">Click anywhere outside to close</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── PDF Reference Modal ──────────────────────────────────────── */}
+            {pdfModalOpen && selectedPdfRef && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-center justify-center p-6"
+                    onClick={() => setPdfModalOpen(false)}
+                >
+                    {/* Backdrop */}
+                    <div className="absolute inset-0 bg-black/75" style={{ backdropFilter: 'blur(4px)' }} />
+                    {/* Modal card */}
+                    <div
+                        className="relative z-10 max-w-3xl w-full rounded-2xl overflow-hidden shadow-2xl"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header bar */}
+                        <div className="flex items-center justify-between px-5 py-3 bg-surface-900">
+                            <div>
+                                <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">Reference Page</p>
+                                <p className="text-sm font-bold text-white">
+                                    {selectedPdfRef}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setPdfModalOpen(false)}
+                                className="p-2 rounded-full text-surface-400 hover:text-white hover:bg-surface-700 transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        {/* Image */}
+                        <img
+                            src={PDF_REF_IMAGES[selectedPdfRef]}
+                            alt={`Reference ${selectedPdfRef}`}
                             className="w-full block"
                             style={{ maxHeight: '70vh', objectFit: 'contain', background: '#111' }}
                         />
