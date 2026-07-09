@@ -19,20 +19,20 @@ export default function ReviewerDashboard() {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState(0);
 
-    const [designerFilter, setDesignerFilter] = useState<string>('all');
+    const [requesterFilter, setRequesterFilter] = useState<string>('all');
     const [timeFilter, setTimeFilter] = useState<string>('all');
     const [customDateRange, setCustomDateRange] = useState<Date[] | null>(null);
 
     const reviews = storeData.reviews;
 
-    // Get unique designers
-    const designers = [...new Set(reviews.map(r => r.designer_name))].filter(Boolean);
+    // Get unique requesters
+    const requesters = [...new Set(reviews.map(r => r.requester_name))].filter(Boolean);
 
     // Filter reviews
     const filteredReviews = reviews.filter(r => {
         let keep = true;
-        if (designerFilter && designerFilter !== 'all') {
-            keep = keep && r.designer_name === designerFilter;
+        if (requesterFilter && requesterFilter !== 'all') {
+            keep = keep && r.requester_name === requesterFilter;
         }
         if (timeFilter !== 'all') {
             const dDate = new Date(r.created_at || Date.now());
@@ -57,7 +57,11 @@ export default function ReviewerDashboard() {
         const data = completedReviews.map(r => ({
             'Document': r.title,
             'Job ID': r.job_id,
-            'Designer': r.designer_name,
+            'Requester': r.requester_name,
+            'Requester Email': r.requester_email,
+            'Reviewed By': r.reviewed_by || 'N/A',
+            'Asset Produced By': r.asset_produced_by || 'N/A',
+            'Number of Pages': r.number_of_pages ?? 'N/A',
             'Style': r.style || 'N/A',
             'Platform': r.platform || 'N/A',
             'Test Score': r.testScore || 'N/A',
@@ -96,7 +100,7 @@ export default function ReviewerDashboard() {
         return <Tag value={rowData.status.replace('_', ' ')} severity={map[rowData.status] || 'info'} className="capitalize text-xs" />;
     };
 
-    const designerOptions = [{ label: 'All Designers', value: 'all' }, ...designers.map(d => ({ label: d, value: d }))];
+    const requesterOptions = [{ label: 'All Requesters', value: 'all' }, ...requesters.map(d => ({ label: d, value: d }))];
     const timeOptions = [
         { label: 'All Time', value: 'all' },
         { label: 'This Week', value: 'week' },
@@ -133,10 +137,10 @@ export default function ReviewerDashboard() {
                             {/* Filters Top Bar */}
                             <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
                                 <Dropdown
-                                    value={designerFilter}
-                                    options={designerOptions}
-                                    onChange={e => setDesignerFilter(e.value)}
-                                    placeholder="All Designers"
+                                    value={requesterFilter}
+                                    options={requesterOptions}
+                                    onChange={e => setRequesterFilter(e.value)}
+                                    placeholder="All Requesters"
                                     className="w-48 text-sm h-[38px] flex items-center"
                                 />
                                 <Dropdown
@@ -190,7 +194,7 @@ export default function ReviewerDashboard() {
                             {/* Scores Table */}
                             <DataTable value={completedReviews} paginator rows={10} emptyMessage="No reviews completed yet" stripedRows rowHover className="text-sm">
                                 <Column field="title" header="Document" sortable />
-                                <Column field="designer_name" header="Designer" sortable />
+                                <Column field="requester_name" header="Requester" sortable />
                                 <Column header="Style" sortable body={(r: Review) => r.style || '—'} />
                                 <Column header="Platform" sortable body={(r: Review) => <span className="capitalize">{r.platform || '—'}</span>} />
                                 <Column header="Test Score" sortable body={(r: Review) => <span className="font-semibold">{r.testScore || '—'}</span>} />
@@ -204,7 +208,7 @@ export default function ReviewerDashboard() {
                         <DataTable value={inProgressReviews} paginator rows={10} emptyMessage="No files in progress" stripedRows rowHover className="text-sm">
                             <Column field="title" header="File Name" sortable />
                             <Column field="job_id" header="Job ID" sortable />
-                            <Column field="designer_name" header="Designer" sortable />
+                            <Column field="requester_name" header="Requester" sortable />
                             <Column field="status" header="Status" body={statusTemplate} sortable />
                             <Column header="Action" body={(rowData: Review) => (
                                 rowData.fileBlobUrl ? (
@@ -226,7 +230,7 @@ export default function ReviewerDashboard() {
                         <DataTable value={completedReviews} paginator rows={10} emptyMessage="No completed reviews" stripedRows rowHover className="text-sm">
                             <Column field="title" header="File Name" sortable />
                             <Column field="job_id" header="Job ID" sortable />
-                            <Column field="designer_name" header="Designer" sortable />
+                            <Column field="requester_name" header="Requester" sortable />
                             <Column header="Score" body={(r: Review) => r.testScore ? <span className="font-semibold">{r.testScore}</span> : '—'} />
                             <Column header="Action" body={(rowData: Review) => (
                                 <div className="flex items-center gap-2">

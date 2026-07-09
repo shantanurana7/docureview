@@ -25,14 +25,16 @@ export default function UploadPage() {
     const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
 
     // Metadata fields
-    const [title, setTitle]                 = useState('');
-    const [jobId, setJobId]                 = useState('');
-    const [designerName, setDesignerName]   = useState('');
-    const [designerEmail, setDesignerEmail] = useState('');
-    const [emailTouched, setEmailTouched]   = useState(false);
-    const [submitting, setSubmitting]       = useState(false);
+    const [title, setTitle]                     = useState('');
+    const [jobId, setJobId]                     = useState('');
+    const [requesterName, setRequesterName]     = useState('');
+    const [requesterEmail, setRequesterEmail]   = useState('');
+    const [reviewedBy, setReviewedBy]           = useState('');
+    const [assetProducedBy, setAssetProducedBy] = useState('');
+    const [emailTouched, setEmailTouched]       = useState(false);
+    const [submitting, setSubmitting]           = useState(false);
 
-    const isEmailValid = EMAIL_REGEX.test(designerEmail.trim());
+    const isEmailValid = EMAIL_REGEX.test(requesterEmail.trim());
 
     const getExt = (name: string) => name.split('.').pop()?.toLowerCase() ?? '';
 
@@ -52,6 +54,7 @@ export default function UploadPage() {
 
         if (isImage) {
             setFilePreview(URL.createObjectURL(selected));
+            setPdfPageCount(1); // images are always 1 page
         } else {
             setFilePreview(null);
             // Count pages
@@ -89,13 +92,13 @@ export default function UploadPage() {
     };
 
     const handleStartReview = async () => {
-        if (!file || !title.trim() || !jobId.trim() || !designerName.trim()) {
+        if (!file || !title.trim() || !jobId.trim() || !requesterName.trim()) {
             alert('Please fill in all required fields and upload a file.');
             return;
         }
         if (!isEmailValid) {
             setEmailTouched(true);
-            alert('Please enter a valid email address for the designer.');
+            alert('Please enter a valid email address for the requester.');
             return;
         }
 
@@ -107,19 +110,22 @@ export default function UploadPage() {
             const base64   = fileType === 'image' ? await fileToBase64(file) : undefined;
 
             const review: Review = {
-                id:              reviewId,
-                title:           title.trim(),
-                job_id:          jobId.trim(),
-                designer_name:   designerName.trim(),
-                designer_email:  designerEmail.trim(),
-                status:          'in_progress',
-                created_at:      new Date().toISOString(),
-                annotations:     [],
-                fileBase64:      base64,
-                fileBlob:        file,
-                fileBlobUrl:     blobUrl,
-                fileType:        fileType ?? 'image',
-                totalPages:      fileType === 'pdf' ? (pdfPageCount ?? 1) : undefined,
+                id:                reviewId,
+                title:             title.trim(),
+                job_id:            jobId.trim(),
+                requester_name:    requesterName.trim(),
+                requester_email:   requesterEmail.trim(),
+                reviewed_by:       reviewedBy.trim() || undefined,
+                asset_produced_by: assetProducedBy.trim() || undefined,
+                number_of_pages:   pdfPageCount ?? undefined,
+                status:            'in_progress',
+                created_at:        new Date().toISOString(),
+                annotations:       [],
+                fileBase64:        base64,
+                fileBlob:          file,
+                fileBlobUrl:       blobUrl,
+                fileType:          fileType ?? 'image',
+                totalPages:        fileType === 'pdf' ? (pdfPageCount ?? 1) : undefined,
                 original_filename: file.name,
             };
 
@@ -132,7 +138,7 @@ export default function UploadPage() {
         }
     };
 
-    const canSubmit = file && title.trim() && jobId.trim() && designerName.trim() && isEmailValid && !submitting;
+    const canSubmit = file && title.trim() && jobId.trim() && requesterName.trim() && isEmailValid && !submitting;
 
     return (
         <div className="p-6 max-w-3xl mx-auto">
@@ -177,8 +183,8 @@ export default function UploadPage() {
                                     <p className="text-sm font-medium text-surface-700 truncate">{file.name}</p>
                                     <p className="text-xs text-surface-400">
                                         {(file.size / 1024).toFixed(1)} KB · {getExt(file.name).toUpperCase()}
-                                        {fileType === 'pdf' && pdfPageCount != null && (
-                                            <span className="ml-2 px-1.5 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-semibold">
+                                        {pdfPageCount != null && (
+                                            <span className="ml-2 px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded-full text-[10px] font-semibold">
                                                 {pdfPageCount} {pdfPageCount === 1 ? 'page' : 'pages'}
                                             </span>
                                         )}
@@ -214,6 +220,7 @@ export default function UploadPage() {
                 <div className="p-6 space-y-4">
                     <h3 className="text-sm font-semibold text-surface-700 mb-1">Review Details</h3>
 
+                    {/* Row 1: File Name + WF Request Number */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-xs font-medium text-surface-600 mb-1">File Name <span className="text-danger">*</span></label>
@@ -235,21 +242,22 @@ export default function UploadPage() {
                         </div>
                     </div>
 
+                    {/* Row 2: Requester Name + Requester Email */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-medium text-surface-600 mb-1">Designer Name <span className="text-danger">*</span></label>
+                            <label className="block text-xs font-medium text-surface-600 mb-1">Requester Name <span className="text-danger">*</span></label>
                             <input
-                                value={designerName}
-                                onChange={e => setDesignerName(e.target.value)}
+                                value={requesterName}
+                                onChange={e => setRequesterName(e.target.value)}
                                 className="w-full p-2.5 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
                                 placeholder="e.g. Jane Doe"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-surface-600 mb-1">Designer Email <span className="text-danger">*</span></label>
+                            <label className="block text-xs font-medium text-surface-600 mb-1">Requester Email <span className="text-danger">*</span></label>
                             <input
-                                value={designerEmail}
-                                onChange={e => setDesignerEmail(e.target.value)}
+                                value={requesterEmail}
+                                onChange={e => setRequesterEmail(e.target.value)}
                                 onBlur={() => setEmailTouched(true)}
                                 type="email"
                                 className={`w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none transition-colors ${
@@ -262,6 +270,46 @@ export default function UploadPage() {
                             {emailTouched && !isEmailValid && (
                                 <p className="text-[11px] text-red-500 mt-1">Please enter a valid email address</p>
                             )}
+                        </div>
+                    </div>
+
+                    {/* Row 3: Reviewed By + Number of Pages */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-medium text-surface-600 mb-1">Reviewed By</label>
+                            <input
+                                value={reviewedBy}
+                                onChange={e => setReviewedBy(e.target.value)}
+                                className="w-full p-2.5 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                placeholder="e.g. John Smith"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-surface-600 mb-1">
+                                Number of Pages
+                                {pdfPageCount != null && (
+                                    <span className="ml-1.5 text-[10px] font-normal text-brand-600">(auto-detected)</span>
+                                )}
+                            </label>
+                            <input
+                                value={pdfPageCount ?? ''}
+                                readOnly
+                                className="w-full p-2.5 border border-surface-200 rounded-lg text-sm bg-surface-50 text-surface-500 cursor-not-allowed"
+                                placeholder="Upload a file first"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Row 4: Asset Produced By */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-medium text-surface-600 mb-1">Asset Produced By</label>
+                            <input
+                                value={assetProducedBy}
+                                onChange={e => setAssetProducedBy(e.target.value)}
+                                className="w-full p-2.5 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                placeholder="e.g. Creative Studio"
+                            />
                         </div>
                     </div>
                 </div>

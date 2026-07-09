@@ -12,15 +12,19 @@ export interface Review {
     id: string;
     title: string;
     job_id: string;
-    designer_name: string;
-    designer_email: string;
+    requester_name: string;
+    requester_email: string;
+    reviewed_by?: string;
+    asset_produced_by?: string;
+    number_of_pages?: number;
     status: ReviewStatus;
     created_at: string;
     annotations: Annotation[];
     testScore?: string | null;
     style?: string | null;
     platform?: string | null;
-    
+    selected_pdf_ref?: string | null;
+
     // Saved Test Results
     savedLogoResult?: CommittedTestResult | null;
     savedMotifResult?: CommittedTestResult | null;

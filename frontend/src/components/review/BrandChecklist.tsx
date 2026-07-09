@@ -174,12 +174,15 @@ interface Props {
     onStyleChange?: (style: StyleOption | null) => void;
     /** Callback when platform selection changes */
     onPlatformChange?: (platform: Platform | '') => void;
+    /** Callback when PDF reference page selection changes */
+    onPdfRefChange?: (ref: string | null) => void;
     /** When true (PDF upload), hides all brand checklist sections */
     isPdf?: boolean;
 
     // Initial loaded state from DB
     initialPlatform?: Platform | '' | null;
     initialStyle?: StyleOption | null;
+    initialPdfRef?: string | null;
     initialLogoResult?: CommittedTestResult | null;
     initialMotifResult?: CommittedTestResult | null;
     initialSizeResult?: CommittedTestResult | null;
@@ -273,13 +276,15 @@ export default function BrandChecklist({
     logoSrc, onLogoSrcChange,
     onStyleChange,
     onPlatformChange,
+    onPdfRefChange,
     isPdf = false,
-    initialPlatform, initialStyle,
+    initialPlatform, initialStyle, initialPdfRef,
     initialLogoResult, initialMotifResult, initialSizeResult,
     initialTypographyResult, initialTextClearResult, initialSimpleTests,
 }: Props) {
     const [platform, setPlatform] = useState<Platform | ''>(initialPlatform || '');
     const [style,    setStyle]    = useState<StyleOption | null>(initialStyle || null);
+    const [pdfRef,   setPdfRef]   = useState<string>(initialPdfRef || '');
 
     // Initialize from saved state on mount (only once)
     useEffect(() => {
@@ -551,7 +556,31 @@ export default function BrandChecklist({
             </div>
 
             {isPdf ? (
-                <div className="p-4">
+                <div className="p-4 space-y-4">
+                    {/* ── PDF Reference Page Dropdown ─────────────────────── */}
+                    <div>
+                        <label className="block text-xs font-medium text-surface-600 mb-1.5">Reference Page</label>
+                        <div className="relative">
+                            <select
+                                value={pdfRef}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    setPdfRef(val);
+                                    onPdfRefChange?.(val || null);
+                                }}
+                                className="w-full appearance-none p-2.5 pr-8 border border-surface-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-brand-500 outline-none"
+                            >
+                                <option value="">-- Select Reference Page --</option>
+                                <option value="Insights led page">Insights led page</option>
+                                <option value="Hub page">Hub page</option>
+                                <option value="Contact page">Contact page</option>
+                                <option value="Infographics">Infographics</option>
+                                <option value="Video banners">Video banners</option>
+                            </select>
+                            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
+                        </div>
+                    </div>
+                    {/* Annotation info note */}
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                         <span className="text-amber-500 text-sm flex-shrink-0 mt-0.5">ℹ️</span>
                         <p className="text-xs text-amber-800 leading-relaxed">

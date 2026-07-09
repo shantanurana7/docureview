@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { Toast } from 'primereact/toast';
-import { Accordion, AccordionTab } from 'primereact/accordion';
+// Accordion removed — PDF panel now uses button selector
 import { getReviewById, updateAnnotations, updateReview } from '../services/localStore';
 import { Review, Annotation, ShapeType, StyleOption, SimpleTestKey, Platform, CommittedTestResult, SavedSimpleTests } from '../types';
 import { ArrowLeft, Square, Save, FileDown, Trash2, Pencil, Check, X, Info, RotateCcw, Send, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
@@ -117,9 +117,10 @@ export default function ReviewPage() {
     // Style reference modal
     const [styleModalOpen, setStyleModalOpen] = useState(false);
 
-    // PDF reference modal
+    // PDF reference page selector (center panel) — also persisted
+    const [selectedPdfRefPage, setSelectedPdfRefPage] = useState<string | null>(null);
+    // PDF reference enlarge modal
     const [pdfModalOpen, setPdfModalOpen] = useState(false);
-    const [selectedPdfRef, setSelectedPdfRef] = useState<string | null>(null);
 
     // Natural pixel dimensions of the uploaded image
     const [imageDimensions, setImageDimensions] = useState<{ w: number; h: number } | null>(null);
@@ -151,7 +152,8 @@ export default function ReviewPage() {
                 if (r.fileType === 'pdf' && r.totalPages) setTotalPages(r.totalPages);
                 if (r.style) setSelectedStyle(r.style as StyleOption);
                 if (r.platform) setPlatform(r.platform as Platform);
-                
+                if (r.selected_pdf_ref) setSelectedPdfRefPage(r.selected_pdf_ref);
+
                 if (r.savedLogoResult) setSavedLogoResult(r.savedLogoResult);
                 if (r.savedMotifResult) setSavedMotifResult(r.savedMotifResult);
                 if (r.savedSizeResult) setSavedSizeResult(r.savedSizeResult);
@@ -312,6 +314,7 @@ export default function ReviewPage() {
             testScore,
             style: selectedStyle,
             platform,
+            selected_pdf_ref: selectedPdfRefPage,
             status: 'reviewed',
             savedLogoResult,
             savedMotifResult,
@@ -558,12 +561,20 @@ export default function ReviewPage() {
             };
 
             // Draw header banner on first summary page
-            activePage.drawRectangle({ x: 0, y: A4H - 130, width: A4W, height: 130, color: rgb(0.12, 0.27, 0.89) });
+            activePage.drawRectangle({ x: 0, y: A4H - 160, width: A4W, height: 160, color: rgb(0.12, 0.27, 0.89) });
             activePage.drawText('BRAND REVIEW SUMMARY', { x: M, y: A4H - 52, size: 36, font: boldFont, color: rgb(1, 1, 1) });
             activePage.drawText(review.title, { x: M, y: A4H - 90, size: 22, font: regFont, color: rgb(0.78, 0.87, 1) });
-            activePage.drawText(`Job: ${review.job_id}   Designer: ${review.designer_name}`,
+            activePage.drawText(`Job: ${review.job_id}   Requester: ${review.requester_name}`,
                 { x: M, y: A4H - 118, size: 17, font: regFont, color: rgb(0.6, 0.75, 1) });
-            sy = A4H - 158;
+            const metaLine2Parts = [
+                review.reviewed_by ? `Reviewed by: ${review.reviewed_by}` : '',
+                review.asset_produced_by ? `Asset produced by: ${review.asset_produced_by}` : '',
+                review.number_of_pages != null ? `Pages: ${review.number_of_pages}` : '',
+            ].filter(Boolean).join('   ');
+            if (metaLine2Parts) {
+                activePage.drawText(metaLine2Parts, { x: M, y: A4H - 146, size: 15, font: regFont, color: rgb(0.55, 0.7, 1) });
+            }
+            sy = A4H - 190;
 
             if (selectedStyle) {
                 dt(`Style: ${selectedStyle}`, { sz: 16, col: [0.4, 0.5, 0.9] });
@@ -644,22 +655,25 @@ export default function ReviewPage() {
 
         const bodyLines = [
             `Brand Review Report: ${review?.title ?? 'Untitled'}`,
-            `Job: ${review?.job_id ?? '-'} | Designer: ${review?.designer_name ?? '-'}`,
+            `Job: ${review?.job_id ?? '-'} | Requester: ${review?.requester_name ?? '-'}`,
+            review?.reviewed_by ? `Reviewed by: ${review.reviewed_by}` : '',
+            review?.asset_produced_by ? `Asset produced by: ${review.asset_produced_by}` : '',
+            review?.number_of_pages != null ? `Number of pages: ${review.number_of_pages}` : '',
             selectedStyle ? `Style: ${selectedStyle}` : '',
             '',
             '--- ANNOTATION COMMENTS ---',
             ...annotationLines,
             ...(!isPdf && selectedStyle ? ['', '--- BRAND TEST RESULTS ---', ...testLines] : []),
-        ].filter(l => l !== undefined);
+        ].filter(l => l !== undefined && l !== '');
 
         return encodeURIComponent(bodyLines.join('\n'));
     };
 
-    const handleSendToDesigner = () => {
+    const handleSendToRequester = () => {
         if (!review) return;
         const subject = encodeURIComponent(`Brand Review: ${review.title}`);
         const body = buildMailtoBody();
-        window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+        window.open(`mailto:${review.requester_email || ''}?subject=${subject}&body=${body}`, '_blank');
     };
 
     // ── Guards ────────────────────────────────────────────────────────────────
@@ -836,79 +850,29 @@ export default function ReviewPage() {
             <div className="w-[20%] min-w-[160px] max-w-[240px] bg-surface-50 border-l border-surface-200 flex flex-col items-center justify-start p-3 overflow-y-auto overflow-x-hidden custom-scrollbar">
                 {isPdf ? (
                     <div className="w-full">
-                        <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-2 text-center">Reference Pages</p>
-                        <Accordion multiple className="text-xs w-full">
-                            <AccordionTab header="Insights led page">
-                                <div className="flex flex-col items-center p-2">
-                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Insights led page content goes here.</p>
-                                    <img 
-                                        src={PDF_REF_IMAGES['Insights led page']} 
-                                        alt="Insights led page reference"
-                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
-                                        onClick={() => {
-                                            setSelectedPdfRef('Insights led page');
-                                            setPdfModalOpen(true);
-                                        }}
-                                    />
+                        {selectedPdfRefPage && PDF_REF_IMAGES[selectedPdfRefPage] ? (
+                            <>
+                                <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide mb-2 text-center">Reference</p>
+                                <p className="text-[10px] font-medium text-brand-700 text-center mb-2">{selectedPdfRefPage}</p>
+                                <p className="text-[9px] text-surface-400 text-center mb-2 leading-relaxed">Click to enlarge</p>
+                                <img
+                                    src={PDF_REF_IMAGES[selectedPdfRefPage]}
+                                    alt={`${selectedPdfRefPage} reference`}
+                                    className="w-full rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
+                                    onClick={() => setPdfModalOpen(true)}
+                                />
+                                <p className="text-[9px] text-surface-500 mt-2 leading-relaxed text-center">
+                                    Reference content for {selectedPdfRefPage}.
+                                </p>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-10 text-center opacity-40">
+                                <div className="w-12 h-12 rounded-full bg-surface-200 flex items-center justify-center mb-3">
+                                    <Square size={20} className="text-surface-400" />
                                 </div>
-                            </AccordionTab>
-                            <AccordionTab header="Hub page">
-                                <div className="flex flex-col items-center p-2">
-                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Hub page content goes here.</p>
-                                    <img 
-                                        src={PDF_REF_IMAGES['Hub page']} 
-                                        alt="Hub page reference"
-                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
-                                        onClick={() => {
-                                            setSelectedPdfRef('Hub page');
-                                            setPdfModalOpen(true);
-                                        }}
-                                    />
-                                </div>
-                            </AccordionTab>
-                            <AccordionTab header="Contact page">
-                                <div className="flex flex-col items-center p-2">
-                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Contact page content goes here.</p>
-                                    <img 
-                                        src={PDF_REF_IMAGES['Contact page']} 
-                                        alt="Contact page reference"
-                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
-                                        onClick={() => {
-                                            setSelectedPdfRef('Contact page');
-                                            setPdfModalOpen(true);
-                                        }}
-                                    />
-                                </div>
-                            </AccordionTab>
-                            <AccordionTab header="Infographics">
-                                <div className="flex flex-col items-center p-2">
-                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Infographics content goes here.</p>
-                                    <img 
-                                        src={PDF_REF_IMAGES['Infographics']} 
-                                        alt="Infographics reference"
-                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
-                                        onClick={() => {
-                                            setSelectedPdfRef('Infographics');
-                                            setPdfModalOpen(true);
-                                        }}
-                                    />
-                                </div>
-                            </AccordionTab>
-                            <AccordionTab header="Video banners">
-                                <div className="flex flex-col items-center p-2">
-                                    <p className="text-surface-600 mb-4 text-center text-[10px] leading-tight">Dummy text data for Video banners content goes here.</p>
-                                    <img 
-                                        src={PDF_REF_IMAGES['Video banners']} 
-                                        alt="Video banners reference"
-                                        className="w-full h-32 rounded-lg shadow-md border border-surface-200 object-cover cursor-pointer hover:opacity-90 transition-all duration-200"
-                                        onClick={() => {
-                                            setSelectedPdfRef('Video banners');
-                                            setPdfModalOpen(true);
-                                        }}
-                                    />
-                                </div>
-                            </AccordionTab>
-                        </Accordion>
+                                <p className="text-[10px] text-surface-400 font-medium leading-relaxed">Select a reference<br/>page in the sidebar</p>
+                            </div>
+                        )}
                     </div>
                 ) : selectedStyle && STYLE_SAMPLE_IMAGES[selectedStyle] ? (
                     <div className="w-full">
@@ -951,7 +915,8 @@ export default function ReviewPage() {
                         <ArrowLeft size={14} /> Back
                     </button>
                     <h2 className="text-base font-bold text-surface-800 truncate">{review.title}</h2>
-                    <p className="text-xs text-surface-400 mt-0.5">Job: {review.job_id} · By: {review.designer_name}</p>
+                    <p className="text-xs text-surface-400 mt-0.5">Job: {review.job_id} · By: {review.requester_name}</p>
+                    {review.reviewed_by && <p className="text-xs text-surface-400">Reviewed by: {review.reviewed_by}</p>}
                     {isPdf && (
                         <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-semibold">
                             PDF · {totalPages} pages
@@ -1030,9 +995,11 @@ export default function ReviewPage() {
                     onLogoSrcChange={setLogoSrc}
                     onStyleChange={setSelectedStyle}
                     onPlatformChange={setPlatform}
+                    onPdfRefChange={val => setSelectedPdfRefPage(val)}
                     isPdf={isPdf}
                     initialPlatform={review?.platform as Platform | undefined}
                     initialStyle={review?.style as StyleOption | undefined}
+                    initialPdfRef={review?.selected_pdf_ref}
                     initialLogoResult={review?.savedLogoResult}
                     initialMotifResult={review?.savedMotifResult}
                     initialSizeResult={review?.savedSizeResult}
@@ -1055,9 +1022,9 @@ export default function ReviewPage() {
                         className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold border border-brand-600 text-brand-600 rounded-lg hover:bg-brand-50 transition-colors">
                         <FileDown size={16} /> Save as PDF
                     </button>
-                    <button onClick={handleSendToDesigner}
+                    <button onClick={handleSendToRequester}
                         className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-indigo-700 text-white rounded-lg hover:bg-indigo-800 transition-colors">
-                        <Send size={15} /> Send to Designer
+                        <Send size={15} /> Send to Requester
                     </button>
                 </div>
             </div>
@@ -1147,7 +1114,7 @@ export default function ReviewPage() {
             )}
 
             {/* ── PDF Reference Modal ──────────────────────────────────────── */}
-            {pdfModalOpen && selectedPdfRef && (
+            {pdfModalOpen && selectedPdfRefPage && PDF_REF_IMAGES[selectedPdfRefPage] && (
                 <div
                     className="fixed inset-0 z-[60] flex items-center justify-center p-6"
                     onClick={() => setPdfModalOpen(false)}
@@ -1164,7 +1131,7 @@ export default function ReviewPage() {
                             <div>
                                 <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">Reference Page</p>
                                 <p className="text-sm font-bold text-white">
-                                    {selectedPdfRef}
+                                    {selectedPdfRefPage}
                                 </p>
                             </div>
                             <button
@@ -1176,8 +1143,8 @@ export default function ReviewPage() {
                         </div>
                         {/* Image */}
                         <img
-                            src={PDF_REF_IMAGES[selectedPdfRef]}
-                            alt={`Reference ${selectedPdfRef}`}
+                            src={PDF_REF_IMAGES[selectedPdfRefPage]}
+                            alt={`Reference ${selectedPdfRefPage}`}
                             className="w-full block"
                             style={{ maxHeight: '70vh', objectFit: 'contain', background: '#111' }}
                         />

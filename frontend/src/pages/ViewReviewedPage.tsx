@@ -210,11 +210,19 @@ export default function ViewReviewedPage() {
                 sy -= 18;
             };
 
-            activePage.drawRectangle({ x: 0, y: A4H - 130, width: A4W, height: 130, color: rgb(0.12, 0.27, 0.89) });
+            activePage.drawRectangle({ x: 0, y: A4H - 160, width: A4W, height: 160, color: rgb(0.12, 0.27, 0.89) });
             activePage.drawText('BRAND REVIEW SUMMARY', { x: M, y: A4H - 52, size: 36, font: boldFont, color: rgb(1, 1, 1) });
             activePage.drawText(review.title, { x: M, y: A4H - 90, size: 22, font: regFont, color: rgb(0.78, 0.87, 1) });
-            activePage.drawText(`Job: ${review.job_id}   Designer: ${review.designer_name}`, { x: M, y: A4H - 118, size: 17, font: regFont, color: rgb(0.6, 0.75, 1) });
-            sy = A4H - 158;
+            activePage.drawText(`Job: ${review.job_id}   Requester: ${review.requester_name}`, { x: M, y: A4H - 118, size: 17, font: regFont, color: rgb(0.6, 0.75, 1) });
+            const metaLine2Parts = [
+                review.reviewed_by ? `Reviewed by: ${review.reviewed_by}` : '',
+                review.asset_produced_by ? `Asset produced by: ${review.asset_produced_by}` : '',
+                review.number_of_pages != null ? `Pages: ${review.number_of_pages}` : '',
+            ].filter(Boolean).join('   ');
+            if (metaLine2Parts) {
+                activePage.drawText(metaLine2Parts, { x: M, y: A4H - 146, size: 15, font: regFont, color: rgb(0.55, 0.7, 1) });
+            }
+            sy = A4H - 190;
 
             if (review.style) {
                 dt(`Style: ${review.style}`, { sz: 16, col: [0.4, 0.5, 0.9] });
@@ -273,18 +281,21 @@ export default function ViewReviewedPage() {
 
     const buildMailtoBody = () => {
         if (!review) return '';
-        let b = `Hi ${review.designer_name},\n\nThe brand review for "${review.title}" (Job: ${review.job_id}) has been completed.\n\n`;
+        let b = `Hi ${review.requester_name},\n\nThe brand review for "${review.title}" (Job: ${review.job_id}) has been completed.\n\n`;
         b += `Total Annotations: ${annotations.length}\n`;
+        if (review.reviewed_by) b += `Reviewed by: ${review.reviewed_by}\n`;
+        if (review.asset_produced_by) b += `Asset produced by: ${review.asset_produced_by}\n`;
+        if (review.number_of_pages != null) b += `Number of pages: ${review.number_of_pages}\n`;
         if (review.testScore && review.testScore !== 'NA') b += `Brand Test Score: ${review.testScore}\n`;
         b += `\nPlease find the reviewed PDF attached (save it using the "Save PDF" button).\n\nBest regards`;
         return encodeURIComponent(b);
     };
 
-    const handleEmailDesigner = () => {
+    const handleEmailRequester = () => {
         if (!review) return;
         const subject = encodeURIComponent(`Brand Review: ${review.title} — Review Complete`);
         const body = buildMailtoBody();
-        window.open(`mailto:${review.designer_email || ''}?subject=${subject}&body=${body}`, '_blank');
+        window.open(`mailto:${review.requester_email || ''}?subject=${subject}&body=${body}`, '_blank');
     };
 
     if (loading) return <div className="flex items-center justify-center h-screen"><i className="pi pi-spin pi-spinner text-4xl text-brand-600" /></div>;
@@ -333,7 +344,8 @@ export default function ViewReviewedPage() {
                         <ArrowLeft size={14} /> Back
                     </button>
                     <h2 className="text-base font-bold text-surface-800 truncate">{review.title}</h2>
-                    <p className="text-xs text-surface-400 mt-0.5">Job: {review.job_id} · By: {review.designer_name}</p>
+                    <p className="text-xs text-surface-400 mt-0.5">Job: {review.job_id} · By: {review.requester_name}</p>
+                    {review.reviewed_by && <p className="text-xs text-surface-400">Reviewed by: {review.reviewed_by}</p>}
                     <span className="mt-1 inline-block text-[10px] font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Reviewed</span>
                 </div>
 
@@ -398,8 +410,8 @@ export default function ViewReviewedPage() {
                         </button>
                     )}
                     <div className="relative group">
-                        <button onClick={handleEmailDesigner} className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors">
-                            <Send size={16} /> Send to Designer
+                        <button onClick={handleEmailRequester} className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors">
+                            <Send size={16} /> Send to Requester
                         </button>
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-surface-900 text-white text-xs p-2.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 text-center">
                             Tip: Generate the PDF first, then attach it to the email manually.
